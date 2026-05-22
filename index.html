@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zaphire Capital — Loan Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#0d1b2a;--navy-mid:#162236;--navy-light:#1e3050;--gold:#c9a84c;--gold-light:#e2c47a;--gold-dim:#8a6d2e;--teal:#2a9d8f;--teal-light:#3dbdad;--red:#e63946;--green:#2dc653;--white:#f0f4f8;--muted:#8fa0b5;--border:rgba(201,168,76,0.18);--card:rgba(22,34,54,0.95);--shadow:0 8px 32px rgba(0,0,0,0.4);--radius:12px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--navy);color:var(--white);overflow:hidden;}
+#app{display:flex;height:100vh;}
+#sidebar{width:220px;flex-shrink:0;background:var(--navy-mid);border-right:1px solid var(--border);display:flex;flex-direction:column;}
+.sidebar-logo{padding:24px 20px 20px;border-bottom:1px solid var(--border);}
+.sidebar-logo .wordmark{font-family:'DM Serif Display',serif;font-size:18px;color:var(--gold);letter-spacing:0.02em;line-height:1.2;}
+.sidebar-logo .sub{font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;}
+.nav-section{padding:12px 0;}
+.nav-label{font-size:10px;color:var(--gold-dim);letter-spacing:0.12em;text-transform:uppercase;padding:6px 20px 4px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border-left:3px solid transparent;transition:all 0.18s;}
+.nav-item:hover{color:var(--white);background:rgba(201,168,76,0.06);}
+.nav-item.active{color:var(--gold);border-left-color:var(--gold);background:rgba(201,168,76,0.08);}
+.nav-item .icon{font-size:16px;width:20px;text-align:center;}
+.sidebar-footer{margin-top:auto;padding:16px 20px;border-top:1px solid var(--border);}
+.sync-status{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:background 0.3s;}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.topbar{height:56px;flex-shrink:0;background:var(--navy-mid);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;}
+.topbar-title{font-family:'DM Serif Display',serif;font-size:20px;color:var(--gold-light);}
+.topbar-actions{display:flex;gap:10px;}
+.btn{padding:7px 16px;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer;border:none;transition:all 0.15s;}
+.btn-gold{background:var(--gold);color:var(--navy);}
+.btn-gold:hover{background:var(--gold-light);}
+.btn-outline{background:transparent;color:var(--gold);border:1px solid var(--border);}
+.btn-outline:hover{border-color:var(--gold);background:rgba(201,168,76,0.08);}
+.btn-ghost{background:rgba(255,255,255,0.05);color:var(--white);}
+.btn-ghost:hover{background:rgba(255,255,255,0.1);}
+.btn-danger{background:var(--red);color:white;}
+.btn-teal{background:var(--teal);color:white;}
+.btn-teal:hover{background:var(--teal-light);}
+.btn-sm{padding:5px 11px;font-size:12px;}
+.content{flex:1;overflow-y:auto;padding:28px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow);}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
+.card-title{font-family:'DM Serif Display',serif;font-size:17px;color:var(--gold-light);}
+.card-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px;}
+.stat-tile{background:var(--navy-light);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;position:relative;overflow:hidden;}
+.stat-tile::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold);}
+.stat-tile.teal::before{background:var(--teal);}
+.stat-tile.green::before{background:var(--green);}
+.stat-tile.red::before{background:var(--red);}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;}
+.stat-value{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:500;color:var(--white);}
+.stat-value.gold{color:var(--gold);}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead th{text-align:left;padding:10px 14px;color:var(--gold-dim);font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;border-bottom:1px solid var(--border);}
+tbody tr{border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.12s;cursor:pointer;}
+tbody tr:hover{background:rgba(201,168,76,0.05);}
+tbody td{padding:11px 14px;color:var(--white);vertical-align:middle;}
+.mono{font-family:'JetBrains Mono',monospace;font-size:12px;}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;}
+.badge-open{background:rgba(45,198,83,0.15);color:var(--green);border:1px solid rgba(45,198,83,0.3);}
+.badge-closed{background:rgba(230,57,70,0.15);color:var(--red);border:1px solid rgba(230,57,70,0.3);}
+.badge-pending{background:rgba(201,168,76,0.15);color:var(--gold);border:1px solid rgba(201,168,76,0.3);}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.form-grid.cols3{grid-template-columns:1fr 1fr 1fr;}
+.form-group{display:flex;flex-direction:column;gap:6px;}
+.form-group.full{grid-column:1/-1;}
+label{font-size:12px;color:var(--muted);font-weight:500;letter-spacing:0.04em;}
+input,select,textarea{background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;color:var(--white);font-family:'DM Sans',sans-serif;font-size:13.5px;padding:9px 13px;outline:none;transition:border 0.15s;width:100%;}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);}
+select option{background:var(--navy-mid);}
+textarea{resize:vertical;min-height:80px;}
+.input-prefix{display:flex;}
+.input-prefix span{background:var(--navy-light);border:1px solid var(--border);border-right:none;border-radius:8px 0 0 8px;padding:9px 10px;font-size:13px;color:var(--gold);}
+.input-prefix input{border-radius:0 8px 8px 0;}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px);}
+.modal{background:var(--navy-mid);border:1px solid var(--border);border-radius:16px;padding:32px;width:700px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.6);}
+.modal-title{font-family:'DM Serif Display',serif;font-size:22px;color:var(--gold-light);margin-bottom:6px;}
+.modal-sub{font-size:13px;color:var(--muted);margin-bottom:24px;}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:24px;padding-top:20px;border-top:1px solid var(--border);}
+.section-divider{margin:24px 0;border:none;border-top:1px solid var(--border);}
+.section-label{font-size:12px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:14px;font-weight:600;}
+.dash-grid{display:grid;grid-template-columns:2fr 1fr;gap:20px;}
+.month-bars{display:flex;gap:8px;align-items:flex-end;height:120px;padding-top:10px;}
+.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.bar{width:100%;background:var(--gold);border-radius:4px 4px 0 0;min-height:2px;transition:opacity 0.15s;}
+.bar:hover{opacity:0.7;}
+.bar-lbl{font-size:10px;color:var(--muted);}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:20px;}
+.tab{padding:10px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+.tab:hover{color:var(--white);}
+.tag-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.tag{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.25);border-radius:20px;font-size:12px;color:var(--gold-light);}
+.tag-del{cursor:pointer;opacity:0.5;font-size:14px;line-height:1;}
+.tag-del:hover{opacity:1;color:var(--red);}
+.tag-add-row{display:flex;gap:8px;margin-top:10px;}
+.quarter-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.q-tile{background:var(--navy-light);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;}
+.q-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;}
+.q-value{font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--gold);}
+.q-count{font-size:11px;color:var(--muted);margin-top:4px;}
+.closed-file-card{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;}
+.closed-file-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
+.closed-file-name{font-weight:600;font-size:14px;color:var(--white);}
+.closed-file-meta{font-size:12px;color:var(--muted);margin-top:2px;}
+.closed-file-notes{font-size:13px;color:var(--muted);line-height:1.6;}
+.search-row{display:flex;gap:10px;margin-bottom:18px;align-items:center;flex-wrap:wrap;}
+.search-row input{max-width:240px;}
+.search-row select{max-width:160px;}
+.gap{height:20px;}
+.loading{display:flex;align-items:center;justify-content:center;height:200px;color:var(--muted);font-size:14px;gap:10px;}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+#lock-screen{position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column;gap:0;}
+.lock-card{background:var(--navy-mid);border:1px solid var(--border);border-radius:20px;padding:48px 44px;width:380px;max-width:92vw;box-shadow:0 32px 80px rgba(0,0,0,0.6);text-align:center;}
+.lock-logo{font-family:'DM Serif Display',serif;font-size:28px;color:var(--gold);margin-bottom:4px;letter-spacing:0.02em;}
+.lock-sub{font-size:11px;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:36px;}
+.lock-label{font-size:12px;color:var(--muted);text-align:left;margin-bottom:8px;font-weight:500;letter-spacing:0.04em;}
+.lock-input{width:100%;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;color:var(--white);font-family:'DM Sans',sans-serif;font-size:15px;padding:12px 16px;outline:none;transition:border 0.15s;text-align:center;letter-spacing:0.08em;}
+.lock-input:focus{border-color:var(--gold);}
+.lock-btn{width:100%;margin-top:16px;padding:13px;border-radius:10px;background:var(--gold);color:var(--navy);font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;border:none;transition:background 0.15s;}
+.lock-btn:hover{background:var(--gold-light);}
+.lock-err{color:var(--red);font-size:12px;margin-top:10px;min-height:18px;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--navy-light);border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:var(--gold-dim);}
+@media print{
+  #sidebar,.topbar,.topbar-actions,.btn,.modal-overlay{display:none!important;}
+  body{background:white;color:black;}
+  .card{border:1px solid #ccc;box-shadow:none;background:white;}
+  .stat-tile{background:#f5f5f5;border:1px solid #ccc;}
+  thead th,tbody td{color:black;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOCK SCREEN -->
+<div id="lock-screen">
+  <div class="lock-card">
+    <div class="lock-logo">Zaphire Capital</div>
+    <div class="lock-sub">Loan Tracker Pro</div>
+    <div class="lock-label">Password</div>
+    <input class="lock-input" type="password" id="lock-input" placeholder="Enter password" onkeydown="if(event.key==='Enter')checkPassword()">
+    <button class="lock-btn" onclick="checkPassword()">Unlock</button>
+    <div class="lock-err" id="lock-err"></div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <nav id="sidebar">
+    <div class="sidebar-logo">
+      <div class="wordmark">Zaphire<br>Capital</div>
+      <div class="sub">Loan Tracker Pro</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Main</div>
+      <div class="nav-item" id="nav-dashboard" onclick="showPage('dashboard')"><span class="icon">📊</span> Dashboard</div>
+      <div class="nav-item" id="nav-loans" onclick="showPage('loans')"><span class="icon">🏠</span> Active Loans</div>
+      <div class="nav-item" id="nav-closed" onclick="showPage('closed')"><span class="icon">📁</span> Closed Files</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Tools</div>
+      <div class="nav-item" id="nav-earnings" onclick="showPage('earnings')"><span class="icon">💰</span> Earnings</div>
+      <div class="nav-item" id="nav-settings" onclick="showPage('settings')"><span class="icon">⚙️</span> Settings</div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sync-status">
+        <div class="sync-dot" id="sync-dot"></div>
+        <span id="sync-label">Connecting...</span>
+      </div>
+    </div>
+  </nav>
+  <div id="main">
+    <div class="topbar">
+      <div class="topbar-title" id="page-title">Dashboard</div>
+      <div class="topbar-actions" id="topbar-actions"></div>
+    </div>
+    <div class="content" id="content">
+      <div class="loading"><div class="spinner"></div> Loading your data...</div>
+    </div>
+  </div>
+</div>
+<div id="modal-overlay" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+// ── SUPABASE CONFIG ───────────────────────────
+var SUPA_URL = 'https://ordrazjxfucogkjykpcf.supabase.co';
+var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9yZHJhemp4ZnVjb2dranlrcGNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NTI3NzEsImV4cCI6MjA5NTAyODc3MX0.LcicQc1hSAfMpc50nTnZ5kEL0II4mLdNBpkkeK7pksw';
+
+// ── SUPABASE CLIENT ───────────────────────────
+function supa(table) {
+  var base = SUPA_URL + '/rest/v1/' + table;
+  var headers = {
+    'apikey': SUPA_KEY,
+    'Authorization': 'Bearer ' + SUPA_KEY,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation'
+  };
+  return {
+    select: function(cols) {
+      return fetch(base + '?select=' + (cols||'*'), {headers: headers})
+        .then(function(r){return r.json();});
+    },
+    insert: function(data) {
+      return fetch(base, {method:'POST', headers: headers, body: JSON.stringify(data)})
+        .then(function(r){return r.json();});
+    },
+    update: function(id, data) {
+      return fetch(base + '?id=eq.' + id, {method:'PATCH', headers: Object.assign({}, headers, {'Prefer':'return=representation'}), body: JSON.stringify(data)})
+        .then(function(r){return r.json();});
+    },
+    delete: function(id) {
+      return fetch(base + '?id=eq.' + id, {method:'DELETE', headers: headers});
+    },
+    upsert: function(data) {
+      return fetch(base, {method:'POST', headers: Object.assign({}, headers, {'Prefer':'resolution=merge-duplicates,return=representation'}), body: JSON.stringify(data)})
+        .then(function(r){return r.json();});
+    }
+  };
+}
+
+// ── STATE ─────────────────────────────────────
+var state = {
+  loans: [],
+  settings: {
+    loanTypes:['Purchase','Refinance','HELOC','FHA','VA','Conventional','Jumbo'],
+    loanStatuses:['Active','Pending','Closed','On Hold','Cancelled'],
+    loanPurposes:['Primary Residence','Investment Property','Second Home'],
+    mloNames:['Deric','Jules'],
+    companyName:'Zaphire Capital',
+    zaphireCompPct:2.5,
+    zaphireSplitPct:35,
+    dericSplitPct:32.5,
+    julesSplitPct:32.5
+  },
+  closedNotes: {}
+};
+
+var DEFAULT_LOANS = [
+  {borrower:'Graham, Jasmine / Roach, Carolyn / Silick, John',loan_amount:533398,closing_date:'2026-02-06',type:'Purchase',status:'Closed',company_comp_pct:2.5,gross_earnings:13334.95,zaphire_pct:35,zaphire_cut:4667.23,deric_pct:32.5,deric_amount:4333.86,jules_pct:32.5,jules_amount:4333.86,tolerance:0,notes:'Triple borrower transaction.',loans_linked:'Graham, Jasmine',pipeline_notes:'',expected_close_date:null,expected_fund_date:null},
+  {borrower:'Ayala, Jennifer & Gutierrez-Rivera, Jose',loan_amount:674500,closing_date:'2026-02-13',type:'Purchase',status:'Closed',company_comp_pct:2.5,gross_earnings:16862.5,zaphire_pct:35,zaphire_cut:5901.88,deric_pct:32.5,deric_amount:5436.26,jules_pct:32.5,jules_amount:5436.26,tolerance:44.05,notes:'Tolerance of $44.05 applied.',loans_linked:'Ayala, Jennifer',pipeline_notes:'',expected_close_date:null,expected_fund_date:null},
+  {borrower:'DosSantos, Silvanio',loan_amount:385000,closing_date:'2026-03-19',type:'Purchase',status:'Closed',company_comp_pct:2.5,gross_earnings:9625,zaphire_pct:35,zaphire_cut:3368.75,deric_pct:32.5,deric_amount:3128.13,jules_pct:32.5,jules_amount:3128.13,tolerance:0,notes:'',loans_linked:'DosSantos',pipeline_notes:'',expected_close_date:null,expected_fund_date:null},
+  {borrower:'Cossifos, George',loan_amount:475000,closing_date:'2026-03-19',type:'Purchase',status:'Closed',company_comp_pct:2.5,gross_earnings:9500,zaphire_pct:35,zaphire_cut:3325,deric_pct:32.5,deric_amount:3087.5,jules_pct:32.5,jules_amount:3087.5,tolerance:0,notes:'',loans_linked:'Cossifos',pipeline_notes:'',expected_close_date:null,expected_fund_date:null},
+  {borrower:'Santiago, Adrian & Bo',loan_amount:327000,closing_date:'2026-04-10',type:'Purchase',status:'Closed',company_comp_pct:2.5,gross_earnings:8175,zaphire_pct:35,zaphire_cut:2861.25,deric_pct:32.5,deric_amount:2656.88,jules_pct:32.5,jules_amount:2656.88,tolerance:0,notes:'',loans_linked:'Santiago',pipeline_notes:'',expected_close_date:null,expected_fund_date:null},
+  {borrower:'Zaphire, Deric & Julia',loan_amount:106000,closing_date:'2026-05-22',type:'HELOC',status:'Closed',company_comp_pct:0,gross_earnings:0,zaphire_pct:35,zaphire_cut:0,deric_pct:32.5,deric_amount:0,jules_pct:32.5,jules_amount:0,tolerance:0,notes:'Personal HELOC - no compensation.',loans_linked:'',pipeline_notes:'',expected_close_date:null,expected_fund_date:null},
+  {borrower:'McGrath, Maria & Sam',loan_amount:500000,closing_date:'2026-05-29',type:'HELOC',status:'Closed',company_comp_pct:2.5,gross_earnings:5600,zaphire_pct:35,zaphire_cut:1960,deric_pct:32.5,deric_amount:1820,jules_pct:32.5,jules_amount:1820,tolerance:0,notes:'',loans_linked:'McGrath',pipeline_notes:'',expected_close_date:null,expected_fund_date:null},
+  {borrower:'Phipps, Verena',loan_amount:340000,closing_date:'2026-05-30',type:'Purchase',status:'Closed',company_comp_pct:2.5,gross_earnings:8500,zaphire_pct:35,zaphire_cut:2975,deric_pct:32.5,deric_amount:2762.5,jules_pct:32.5,jules_amount:2762.5,tolerance:0,notes:'',loans_linked:'Phipps',pipeline_notes:'',expected_close_date:null,expected_fund_date:null},
+  {borrower:'Chuco, Jose',loan_amount:513750,closing_date:null,type:'Purchase',status:'Active',company_comp_pct:2.5,gross_earnings:0,zaphire_pct:35,zaphire_cut:0,deric_pct:32.5,deric_amount:0,jules_pct:32.5,jules_amount:0,tolerance:0,notes:'Expected shortly.',loans_linked:'Chuco',pipeline_notes:'Pending CTC',expected_close_date:'2026-06-15',expected_fund_date:'2026-06-17'},
+  {borrower:'Oscarson, Damon',loan_amount:200000,closing_date:null,type:'Refinance',status:'Active',company_comp_pct:2.5,gross_earnings:0,zaphire_pct:35,zaphire_cut:0,deric_pct:32.5,deric_amount:0,jules_pct:32.5,jules_amount:0,tolerance:0,notes:'',loans_linked:'Oscarson',pipeline_notes:'',expected_close_date:null,expected_fund_date:null}
+];
+
+// ── SYNC STATUS ───────────────────────────────
+function setSyncStatus(status, msg) {
+  var dot = document.getElementById('sync-dot');
+  var lbl = document.getElementById('sync-label');
+  if(!dot || !lbl) return;
+  var colors = {connected:'var(--green)', saving:'var(--gold)', saved:'var(--green)', error:'var(--red)', loading:'var(--muted)'};
+  dot.style.background = colors[status] || 'var(--muted)';
+  lbl.textContent = msg || status;
+}
+
+// ── SUPABASE API HELPERS ──────────────────────
+function apiHeaders(extra) {
+  var h = {
+    'apikey': SUPA_KEY,
+    'Authorization': 'Bearer ' + SUPA_KEY,
+    'Content-Type': 'application/json'
+  };
+  if(extra) Object.keys(extra).forEach(function(k){h[k]=extra[k];});
+  return h;
+}
+
+function apiGet(table, query) {
+  var url = SUPA_URL + '/rest/v1/' + table + '?' + (query||'select=*') + '&order=id.asc';
+  return fetch(url, {headers: apiHeaders()}).then(function(r){
+    if(!r.ok) throw new Error('GET failed: ' + r.status);
+    return r.json();
+  });
+}
+
+function apiPost(table, data) {
+  return fetch(SUPA_URL + '/rest/v1/' + table, {
+    method: 'POST',
+    headers: apiHeaders({'Prefer':'return=representation'}),
+    body: JSON.stringify(data)
+  }).then(function(r){
+    if(!r.ok) return r.text().then(function(t){throw new Error(t);});
+    return r.json();
+  });
+}
+
+function apiPatch(table, id, data) {
+  return fetch(SUPA_URL + '/rest/v1/' + table + '?id=eq.' + id, {
+    method: 'PATCH',
+    headers: apiHeaders({'Prefer':'return=representation'}),
+    body: JSON.stringify(data)
+  }).then(function(r){
+    if(!r.ok) return r.text().then(function(t){throw new Error(t);});
+    return r.json();
+  });
+}
+
+function apiDelete(table, id) {
+  return fetch(SUPA_URL + '/rest/v1/' + table + '?id=eq.' + id, {
+    method: 'DELETE',
+    headers: apiHeaders()
+  });
+}
+
+function apiUpsert(table, data) {
+  return fetch(SUPA_URL + '/rest/v1/' + table, {
+    method: 'POST',
+    headers: apiHeaders({'Prefer':'resolution=merge-duplicates,return=representation'}),
+    body: JSON.stringify(data)
+  }).then(function(r){
+    if(!r.ok) return r.text().then(function(t){throw new Error(t);});
+    return r.json();
+  });
+}
+
+// ── INIT / LOAD ───────────────────────────────
+function initApp() {
+  setSyncStatus('loading', 'Connecting...');
+  // Load loans and settings in parallel
+  Promise.all([
+    apiGet('zt_loans', 'select=*'),
+    apiGet('zt_settings', 'select=*')
+  ]).then(function(results) {
+    var loans = results[0];
+    var settingsRows = results[1];
+
+    // If no loans exist yet, seed with default data
+    if(!loans || loans.length === 0) {
+      return seedDefaultData().then(function() {
+        return Promise.all([
+          apiGet('zt_loans', 'select=*'),
+          apiGet('zt_settings', 'select=*')
+        ]);
+      }).then(function(r2) { return r2; });
+    }
+    return results;
+  }).then(function(results) {
+    state.loans = results[0] || [];
+    var settingsRows = results[1] || [];
+    // Parse settings from key/value rows
+    settingsRows.forEach(function(row) {
+      try {
+        if(row.key === 'main') state.settings = JSON.parse(row.value);
+      } catch(e) {}
+    });
+    // Load closed notes
+    return apiGet('zt_notes', 'select=*');
+  }).then(function(notes) {
+    (notes||[]).forEach(function(n) {
+      state.closedNotes[n.loan_id] = n.note;
+    });
+    setSyncStatus('connected', 'Synced \u2713');
+    showPage('dashboard');
+  }).catch(function(err) {
+    setSyncStatus('error', 'Connection error');
+    // Check if tables don't exist yet
+    if(err.message && err.message.indexOf('42P01') > -1) {
+      document.getElementById('content').innerHTML = needsSetupHtml();
+    } else {
+      document.getElementById('content').innerHTML = '<div style="padding:40px;color:var(--red);line-height:2"><strong>Connection error:</strong><br>' + err.message + '<br><br>Make sure the Supabase tables are created. See the Setup tab.</div>';
+    }
+  });
+}
+
+function seedDefaultData() {
+  return apiPost('zt_loans', DEFAULT_LOANS).then(function() {
+    return apiUpsert('zt_settings', [{key:'main', value: JSON.stringify(state.settings)}]);
+  });
+}
+
+function needsSetupHtml() {
+  return '<div style="max-width:600px;margin:0 auto;padding:20px">'
+    + '<div class="card"><div class="card-title" style="margin-bottom:12px">&#9888; Database Setup Required</div>'
+    + '<div style="font-size:13px;color:var(--muted);line-height:1.8;margin-bottom:16px">The Supabase tables haven\'t been created yet. Run the SQL below in your Supabase SQL Editor to set up the database.</div>'
+    + '<div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:16px;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:var(--gold-light);white-space:pre;overflow-x:auto;line-height:1.6">'
+    + getSetupSQL()
+    + '</div>'
+    + '<div style="margin-top:16px;font-size:12px;color:var(--muted)">After running the SQL, refresh this page.</div>'
+    + '<button class="btn btn-gold" style="margin-top:12px" onclick="location.reload()">Refresh Page</button>'
+    + '</div></div>';
+}
+
+function getSetupSQL() {
+  return [
+    '-- Zaphire Capital Loan Tracker Tables',
+    '',
+    'create table if not exists zt_loans (',
+    '  id bigserial primary key,',
+    '  borrower text,',
+    '  loan_amount numeric,',
+    '  closing_date date,',
+    '  type text,',
+    '  status text,',
+    '  company_comp_pct numeric,',
+    '  gross_earnings numeric,',
+    '  zaphire_pct numeric,',
+    '  zaphire_cut numeric,',
+    '  deric_pct numeric,',
+    '  deric_amount numeric,',
+    '  jules_pct numeric,',
+    '  jules_amount numeric,',
+    '  tolerance numeric,',
+    '  notes text,',
+    '  loans_linked text,',
+    '  pipeline_notes text,',
+    '  expected_close_date date,',
+    '  expected_fund_date date,',
+    '  created_at timestamptz default now()',
+    ');',
+    '',
+    'create table if not exists zt_settings (',
+    '  id bigserial primary key,',
+    '  key text unique,',
+    '  value text',
+    ');',
+    '',
+    'create table if not exists zt_notes (',
+    '  id bigserial primary key,',
+    '  loan_id bigint references zt_loans(id) on delete cascade,',
+    '  note text,',
+    '  updated_at timestamptz default now()',
+    ');',
+    '',
+    '-- Allow public access (anon key)',
+    'alter table zt_loans enable row level security;',
+    'alter table zt_settings enable row level security;',
+    'alter table zt_notes enable row level security;',
+    '',
+    'create policy "allow_all_zt_loans" on zt_loans for all using (true) with check (true);',
+    'create policy "allow_all_zt_settings" on zt_settings for all using (true) with check (true);',
+    'create policy "allow_all_zt_notes" on zt_notes for all using (true) with check (true);'
+  ].join('\n');
+}
+
+// ── FORMATTERS ────────────────────────────────
+function fmtDollar(n) {
+  if(!n && n !== 0) return '\u2014';
+  return '$' + parseFloat(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function fmtDate(d) {
+  if(!d) return '\u2014';
+  var dt = new Date(d + 'T12:00:00');
+  return dt.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function badge(status) {
+  var cls = status==='Closed'?'badge-closed':status==='Active'?'badge-open':'badge-pending';
+  return '<span class="badge ' + cls + '">' + esc(status) + '</span>';
+}
+function statTile(cls, label, value, sub) {
+  return '<div class="stat-tile ' + cls + '"><div class="stat-label">' + label + '</div><div class="stat-value">' + value + '</div><div class="stat-sub">' + sub + '</div></div>';
+}
+function miniTile(color, label, val) {
+  return '<div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">' + label + '</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:15px;color:' + color + '">' + val + '</div></div>';
+}
+
+// ── NAVIGATION ───────────────────────────────
+var currentPage = 'dashboard';
+var loanFilter = {search:'', status:'', type:''};
+var settingsTab = 'dropdowns';
+
+function showPage(page) {
+  currentPage = page;
+  ['dashboard','loans','closed','earnings','settings'].forEach(function(p) {
+    var el = document.getElementById('nav-' + p);
+    if(el) el.className = 'nav-item' + (p===page?' active':'');
+  });
+  var titles = {dashboard:'Dashboard',loans:'Active Loans',closed:'Closed Files',earnings:'Earnings & Payouts',settings:'Settings'};
+  document.getElementById('page-title').textContent = titles[page] || page;
+  var acts = document.getElementById('topbar-actions');
+  if(page==='dashboard'||page==='loans') {
+    acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-gold btn-sm" onclick="openAddLoan()">+ Add Loan</button>';
+  } else {
+    acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button>';
+  }
+  document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
+  var renders = {dashboard:renderDashboard, loans:renderLoans, closed:renderClosed, earnings:renderEarnings, settings:renderSettings};
+  setTimeout(function() {
+    try { (renders[page]||renderDashboard)(); }
+    catch(e) { document.getElementById('content').innerHTML = '<div style="padding:40px;color:var(--red)">Error: ' + e.message + '</div>'; }
+  }, 10);
+}
+
+// ── DASHBOARD ────────────────────────────────
+function renderDashboard() {
+  var el = document.getElementById('content');
+  var closed = state.loans.filter(function(l){return l.status==='Closed';});
+  var active = state.loans.filter(function(l){return l.status==='Active'||l.status==='Pending';});
+  var totalVolume=0,totalGross=0,totalZaphire=0,totalDeric=0;
+  closed.forEach(function(l){totalVolume+=+(l.loan_amount||0);totalGross+=+(l.gross_earnings||0);totalZaphire+=+(l.zaphire_cut||0);totalDeric+=+(l.deric_amount||0);});
+
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var mData=Array(12).fill(0), mCount=Array(12).fill(0);
+  closed.forEach(function(l){
+    if(l.closing_date){var m=new Date(l.closing_date+'T12:00:00').getMonth();mData[m]+=+(l.gross_earnings||0);mCount[m]++;}
+  });
+  var maxM=Math.max.apply(null,mData.concat([1]));
+  var qData=[0,0,0,0],qCount=[0,0,0,0];
+  closed.forEach(function(l){
+    if(l.closing_date){var m=new Date(l.closing_date+'T12:00:00').getMonth();var q=Math.floor(m/3);qData[q]+=+(l.loan_amount||0);qCount[q]++;}
+  });
+  var recent=closed.slice().sort(function(a,b){return (b.closing_date||'')>(a.closing_date||'')?1:-1;}).slice(0,5);
+
+  var html='<div class="stat-grid">';
+  html+=statTile('','Total Loan Volume','<span class="gold">'+fmtDollar(totalVolume)+'</span>',closed.length+' closed loans');
+  html+=statTile('teal','Gross Earnings YTD',fmtDollar(totalGross),'All closed files');
+  html+=statTile('green','Zaphire Capital Cut',fmtDollar(totalZaphire),'Company share');
+  html+=statTile('','Deric\'s Earnings','<span style="color:var(--gold)">'+fmtDollar(totalDeric)+'</span>','MLO net share');
+  html+=statTile('red','Active Pipeline',active.length,'Loans in progress');
+  html+=statTile('','Avg Loan Size',closed.length?fmtDollar(totalVolume/closed.length):'\u2014','Closed only');
+  html+='</div>';
+
+  html+='<div class="dash-grid">';
+  html+='<div class="card"><div class="card-header"><div><div class="card-title">Monthly Earnings</div><div class="card-sub">Click a bar to see that month\'s loans</div></div></div>';
+  html+='<div class="month-bars">';
+  months.forEach(function(m,i){
+    var h=mData[i]?Math.max(8,Math.round(mData[i]/maxM*100)):2;
+    var clk=mData[i]?'onclick="showMonthDetail('+i+')" style="cursor:pointer"':'style="opacity:0.3"';
+    var tip=m+': '+fmtDollar(mData[i])+' ('+mCount[i]+' loan'+(mCount[i]!==1?'s':'')+')';
+    html+='<div class="bar-wrap" '+clk+'><div class="bar" style="height:'+h+'px" title="'+tip+'"></div><div class="bar-lbl">'+m+'</div>';
+    if(mCount[i]) html+='<div class="bar-lbl">'+mCount[i]+'</div>';
+    html+='</div>';
+  });
+  html+='</div></div>';
+
+  html+='<div class="card"><div class="card-header"><div><div class="card-title">Quarters</div><div class="card-sub">Volume by quarter</div></div></div>';
+  html+='<div class="quarter-grid">';
+  ['Q1','Q2','Q3','Q4'].forEach(function(q,i){
+    html+='<div class="q-tile"><div class="q-title">'+q+'</div><div class="q-value">'+(qData[i]?fmtDollar(qData[i]):'\u2014')+'</div><div class="q-count">'+qCount[i]+' loan'+(qCount[i]!==1?'s':'')+'</div></div>';
+  });
+  html+='</div></div></div>';
+
+  html+='<div class="gap"></div><div class="card"><div class="card-header"><div><div class="card-title">Recent Closings</div><div class="card-sub">Last 5 closed files</div></div><button class="btn btn-ghost btn-sm" onclick="showPage(\'loans\')">View All &rarr;</button></div>';
+  html+='<div class="table-wrap"><table><thead><tr><th>Borrower</th><th>Loan Amount</th><th>Closed</th><th>Gross</th><th>Deric</th><th>Status</th></tr></thead><tbody>';
+  if(recent.length){
+    recent.forEach(function(l){
+      html+='<tr onclick="openLoanDetail('+l.id+')">';
+      html+='<td><strong>'+esc(l.borrower)+'</strong></td>';
+      html+='<td class="mono">'+fmtDollar(l.loan_amount)+'</td>';
+      html+='<td>'+fmtDate(l.closing_date)+'</td>';
+      html+='<td class="mono">'+fmtDollar(l.gross_earnings)+'</td>';
+      html+='<td class="mono" style="color:var(--gold)">'+fmtDollar(l.deric_amount)+'</td>';
+      html+='<td>'+badge('Closed')+'</td></tr>';
+    });
+  } else {
+    html+='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px">No closed loans yet</td></tr>';
+  }
+  html+='</tbody></table></div></div>';
+
+  if(active.length){
+    html+='<div class="gap"></div><div class="card"><div class="card-header"><div><div class="card-title">Active Pipeline</div></div></div>';
+    html+='<div class="table-wrap"><table><thead><tr><th>Borrower</th><th>Loan Amount</th><th>Type</th><th>Exp. Close</th><th>Notes</th></tr></thead><tbody>';
+    active.forEach(function(l){
+      html+='<tr onclick="openLoanDetail('+l.id+')">';
+      html+='<td><strong>'+esc(l.borrower)+'</strong></td>';
+      html+='<td class="mono">'+fmtDollar(l.loan_amount)+'</td>';
+      html+='<td>'+esc(l.type)+'</td>';
+      html+='<td>'+(l.expected_close_date?fmtDate(l.expected_close_date):'\u2014')+'</td>';
+      html+='<td style="color:var(--muted);font-size:12px">'+esc(l.pipeline_notes||l.notes||'')+'</td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+  }
+  el.innerHTML = html;
+}
+
+function showMonthDetail(mi){
+  var names=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var loans=state.loans.filter(function(l){return l.status==='Closed'&&l.closing_date&&new Date(l.closing_date+'T12:00:00').getMonth()===mi;});
+  var tG=0,tZ=0,tD=0,tJ=0,tV=0;
+  loans.forEach(function(l){tG+=+(l.gross_earnings||0);tZ+=+(l.zaphire_cut||0);tD+=+(l.deric_amount||0);tJ+=+(l.jules_amount||0);tV+=+(l.loan_amount||0);});
+  var html='<div class="modal-title">'+names[mi]+' &mdash; Closed Loans</div>';
+  html+='<div class="modal-sub">'+loans.length+' loan'+(loans.length!==1?'s':'')+' &middot; Volume: '+fmtDollar(tV)+'</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">';
+  html+=miniTile('var(--gold-light)','Gross',fmtDollar(tG));
+  html+=miniTile('var(--teal-light)','Zaphire',fmtDollar(tZ));
+  html+=miniTile('var(--gold)','Deric',fmtDollar(tD));
+  html+=miniTile('#c4a8f5','Jules',fmtDollar(tJ));
+  html+='</div><div class="table-wrap"><table><thead><tr><th>Borrower</th><th>Loan Amt</th><th>Date</th><th>Gross</th><th>Zaphire</th><th>Deric</th><th>Jules</th></tr></thead><tbody>';
+  loans.forEach(function(l){
+    html+='<tr onclick="closeModal();openLoanDetail('+l.id+')">';
+    html+='<td><strong>'+esc(l.borrower)+'</strong></td>';
+    html+='<td class="mono">'+fmtDollar(l.loan_amount)+'</td>';
+    html+='<td>'+fmtDate(l.closing_date)+'</td>';
+    html+='<td class="mono" style="color:var(--gold-light)">'+fmtDollar(l.gross_earnings)+'</td>';
+    html+='<td class="mono" style="color:var(--teal-light)">'+fmtDollar(l.zaphire_cut)+'</td>';
+    html+='<td class="mono" style="color:var(--gold)">'+fmtDollar(l.deric_amount)+'</td>';
+    html+='<td class="mono" style="color:#c4a8f5">'+fmtDollar(l.jules_amount||0)+'</td></tr>';
+  });
+  html+='</tbody></table></div><div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>';
+  openModal(html);
+}
+
+// ── LOANS PAGE ───────────────────────────────
+function renderLoans(){
+  var el=document.getElementById('content');
+  var today=new Date();today.setHours(0,0,0,0);
+  var pipeline=state.loans.filter(function(l){return l.status==='Active'||l.status==='Pending';}).slice().sort(function(a,b){return (a.expected_close_date||'9999')>(b.expected_close_date||'9999')?1:-1;});
+  var html='';
+
+  if(pipeline.length){
+    html+='<div class="card" style="margin-bottom:20px">';
+    html+='<div class="card-header"><div><div class="card-title">&#128197; Upcoming Pipeline</div><div class="card-sub">Sorted by expected closing date</div></div><div style="font-size:12px;color:var(--muted)">'+pipeline.length+' loan'+(pipeline.length!==1?'s':'')+' in pipeline</div></div>';
+    pipeline.forEach(function(l){
+      var days=null,fddays=null;
+      if(l.expected_close_date){var d=new Date(l.expected_close_date+'T12:00:00');days=Math.round((d-today)/86400000);}
+      if(l.expected_fund_date){var d2=new Date(l.expected_fund_date+'T12:00:00');fddays=Math.round((d2-today)/86400000);}
+      var uc=days===null?'var(--muted)':days<0?'var(--red)':days<=7?'var(--red)':days<=14?'#f4a261':days<=30?'var(--gold)':'var(--green)';
+      var ul=days===null?'No date set':days<0?Math.abs(days)+'d overdue':days+'d away';
+      var fc=fddays===null?'var(--muted)':fddays<0?'var(--red)':fddays<=7?'var(--red)':fddays<=14?'#f4a261':fddays<=30?'var(--gold)':'var(--green)';
+      var fl=fddays===null?'No date set':fddays<0?Math.abs(fddays)+'d overdue':fddays+'d away';
+      var estGross=(+(l.loan_amount||0))*(+(l.company_comp_pct||2.5))/100;
+      var estDeric=estGross*(+(l.deric_pct||32.5))/100;
+      html+='<div style="border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+uc+';border-radius:10px;padding:16px 18px;margin-bottom:10px;display:grid;grid-template-columns:1fr auto;gap:12px;cursor:pointer" onclick="openLoanDetail('+l.id+')">';
+      html+='<div><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap"><strong style="font-size:14px">'+esc(l.borrower)+'</strong>'+badge(l.status)+'<span style="font-size:12px;color:var(--muted)">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+'</span></div>';
+      html+='<div style="display:flex;gap:24px;flex-wrap:wrap">';
+      html+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px">Exp. Close</div><div style="font-size:13px;color:'+uc+';font-weight:500">'+(l.expected_close_date?fmtDate(l.expected_close_date):'&mdash;')+(days!==null?' <span style="font-size:11px;opacity:0.8">('+ul+')</span>':'')+'</div></div>';
+      html+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px">Exp. Funding</div><div style="font-size:13px;color:'+fc+';font-weight:500">'+(l.expected_fund_date?fmtDate(l.expected_fund_date):'&mdash;')+(fddays!==null?' <span style="font-size:11px;opacity:0.8">('+fl+')</span>':'')+'</div></div>';
+      if(l.pipeline_notes) html+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px">Notes</div><div style="font-size:12px;color:var(--muted)">'+esc(l.pipeline_notes)+'</div></div>';
+      html+='</div></div>';
+      html+='<div style="text-align:right;flex-shrink:0"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">Est. Deric</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:16px;color:var(--gold);font-weight:600">'+fmtDollar(estDeric)+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">'+(l.company_comp_pct||2.5)+'% comp</div></div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+
+  var allLoans=state.loans.filter(function(l){
+    if(loanFilter.search&&l.borrower.toLowerCase().indexOf(loanFilter.search.toLowerCase())<0) return false;
+    if(loanFilter.status&&l.status!==loanFilter.status) return false;
+    if(loanFilter.type&&l.type!==loanFilter.type) return false;
+    return true;
+  });
+
+  html+='<div class="search-row">';
+  html+='<input type="text" placeholder="Search borrower..." value="'+esc(loanFilter.search)+'" oninput="loanFilter.search=this.value;renderLoans()" style="max-width:240px">';
+  html+='<select onchange="loanFilter.status=this.value;renderLoans()"><option value="">All Statuses</option>';
+  state.settings.loanStatuses.forEach(function(s){html+='<option value="'+esc(s)+'"'+(loanFilter.status===s?' selected':'')+'>'+esc(s)+'</option>';});
+  html+='</select><select onchange="loanFilter.type=this.value;renderLoans()"><option value="">All Types</option>';
+  state.settings.loanTypes.forEach(function(t){html+='<option value="'+esc(t)+'"'+(loanFilter.type===t?' selected':'')+'>'+esc(t)+'</option>';});
+  html+='</select><span style="color:var(--muted);font-size:13px">'+allLoans.length+' loan'+(allLoans.length!==1?'s':'')+'</span></div>';
+
+  html+='<div class="card"><div class="table-wrap"><table><thead><tr><th>Borrower</th><th>Loan Amount</th><th>Type</th><th>Actual Close</th><th>Exp. Close</th><th>Exp. Fund</th><th>Gross</th><th>Zaphire</th><th>Deric</th><th>Status</th><th></th></tr></thead><tbody>';
+  if(allLoans.length){
+    allLoans.forEach(function(l){
+      html+='<tr>';
+      html+='<td onclick="openLoanDetail('+l.id+')" style="max-width:200px"><strong>'+esc(l.borrower)+'</strong>';
+      if(l.pipeline_notes) html+='<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">'+esc(l.pipeline_notes)+'</div>';
+      html+='</td>';
+      html+='<td class="mono">'+fmtDollar(l.loan_amount)+'</td>';
+      html+='<td>'+esc(l.type)+'</td>';
+      html+='<td>'+fmtDate(l.closing_date)+'</td>';
+      html+='<td>'+(l.expected_close_date?fmtDate(l.expected_close_date):'\u2014')+'</td>';
+      html+='<td style="color:var(--gold)">'+(l.expected_fund_date?fmtDate(l.expected_fund_date):'\u2014')+'</td>';
+      html+='<td class="mono">'+fmtDollar(l.gross_earnings)+'</td>';
+      html+='<td class="mono">'+fmtDollar(l.zaphire_cut)+'</td>';
+      html+='<td class="mono" style="color:var(--gold)">'+fmtDollar(l.deric_amount)+'</td>';
+      html+='<td>'+badge(l.status)+'</td>';
+      html+='<td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditLoan('+l.id+')">Edit</button> <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteLoan('+l.id+')">Del</button></td>';
+      html+='</tr>';
+    });
+  } else {
+    html+='<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:40px">No loans found</td></tr>';
+  }
+  html+='</tbody></table></div></div>';
+  el.innerHTML=html;
+}
+
+// ── CLOSED FILES ─────────────────────────────
+function renderClosed(){
+  var el=document.getElementById('content');
+  var closed=state.loans.filter(function(l){return l.status==='Closed';}).slice().sort(function(a,b){return (b.closing_date||'')>(a.closing_date||'')?1:-1;});
+  var html='<div class="card">';
+  html+='<div class="card-header"><div><div class="card-title">Closed File Notes</div><div class="card-sub">Click Notes to add details to any closed file</div></div></div>';
+  if(closed.length){
+    closed.forEach(function(l){
+      var note=state.closedNotes[l.id]||l.notes||'';
+      html+='<div class="closed-file-card">';
+      html+='<div class="closed-file-header"><div>';
+      html+='<div class="closed-file-name">'+esc(l.borrower)+'</div>';
+      html+='<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+' &middot; Closed '+fmtDate(l.closing_date)+' &middot; Gross: '+fmtDollar(l.gross_earnings)+'</div>';
+      html+='</div><div style="display:flex;gap:8px;flex-shrink:0">';
+      html+='<button class="btn btn-teal btn-sm" onclick="editClosedNote('+l.id+')">&#9998; Notes</button>';
+      html+='<button class="btn btn-outline btn-sm" onclick="openLoanDetail('+l.id+')">View</button>';
+      html+='</div></div>';
+      html+=note?'<div class="closed-file-notes">'+esc(note).replace(/\n/g,'<br>')+'</div>':'<div class="closed-file-notes" style="font-style:italic;opacity:0.4">No notes. Click Notes to add details.</div>';
+      html+='<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">';
+      if(+(l.tolerance||0)) html+='<span class="badge badge-closed">Tolerance: '+fmtDollar(l.tolerance)+'</span>';
+      html+=badge(l.status)+' <span class="badge" style="background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid var(--border)">'+esc(l.type)+'</span>';
+      html+='</div></div>';
+    });
+  } else {
+    html+='<div style="text-align:center;padding:60px;color:var(--muted)">No closed loans yet.</div>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function editClosedNote(id){
+  var loan=state.loans.find(function(l){return l.id===id;});
+  var existing=state.closedNotes[id]||loan.notes||'';
+  var html='<div class="modal-title">File Notes</div>';
+  html+='<div class="modal-sub">'+esc(loan.borrower)+' &middot; '+esc(loan.type)+' &middot; '+fmtDollar(loan.loan_amount)+'</div>';
+  html+='<div class="form-group"><label>Notes</label><textarea id="note-text" rows="8" style="min-height:160px">'+esc(existing)+'</textarea></div>';
+  html+='<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveClosedNote('+id+')">Save Notes</button></div>';
+  openModal(html);
+}
+
+function saveClosedNote(id){
+  var note=document.getElementById('note-text').value;
+  setSyncStatus('saving','Saving...');
+  // Check if note already exists
+  apiGet('zt_notes','select=*&loan_id=eq.'+id).then(function(rows){
+    var promise;
+    if(rows&&rows.length>0){
+      promise=apiPatch('zt_notes',rows[0].id,{note:note,updated_at:new Date().toISOString()});
+    } else {
+      promise=apiPost('zt_notes',[{loan_id:id,note:note}]);
+    }
+    return promise;
+  }).then(function(){
+    state.closedNotes[id]=note;
+    setSyncStatus('saved','Saved \u2713');
+    closeModal();renderClosed();
+  }).catch(function(e){setSyncStatus('error','Save failed');alert('Error saving note: '+e.message);});
+}
+
+// ── EARNINGS ─────────────────────────────────
+function renderEarnings(){
+  var el=document.getElementById('content');
+  var closed=state.loans.filter(function(l){return l.status==='Closed';});
+  var mNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var mData=[];
+  for(var i=0;i<12;i++) mData.push({loans:[],gross:0,z:0,d:0,j:0});
+  closed.forEach(function(l){
+    if(l.closing_date){var m=new Date(l.closing_date+'T12:00:00').getMonth();mData[m].loans.push(l);mData[m].gross+=+(l.gross_earnings||0);mData[m].z+=+(l.zaphire_cut||0);mData[m].d+=+(l.deric_amount||0);mData[m].j+=+(l.jules_amount||0);}
+  });
+  var tG=0,tZ=0,tD=0,tJ=0;
+  closed.forEach(function(l){tG+=+(l.gross_earnings||0);tZ+=+(l.zaphire_cut||0);tD+=+(l.deric_amount||0);tJ+=+(l.jules_amount||0);});
+
+  var html='<div class="stat-grid" style="margin-bottom:24px">';
+  html+=statTile('','YTD Gross','<span class="gold">'+fmtDollar(tG)+'</span>','All closed');
+  html+=statTile('teal','Zaphire Total',fmtDollar(tZ),'Company share');
+  html+=statTile('green','Deric Total',fmtDollar(tD),'YTD');
+  html+=statTile('','Jules Total','<span style="color:#c4a8f5">'+fmtDollar(tJ)+'</span>','YTD');
+  html+='</div>';
+
+  html+='<div class="card" style="margin-bottom:20px"><div class="card-title" style="margin-bottom:18px">Monthly Breakdown</div><div class="table-wrap"><table>';
+  html+='<thead><tr><th>Month</th><th>Loans</th><th>Gross</th><th>Zaphire</th><th>Deric</th><th>Jules</th><th>YTD Gross</th></tr></thead><tbody>';
+  var ytd=0;
+  mData.forEach(function(m,i){
+    ytd+=m.gross;
+    html+='<tr><td>'+mNames[i]+'</td><td>'+m.loans.length+'</td>';
+    html+='<td class="mono">'+(m.gross?fmtDollar(m.gross):'\u2014')+'</td>';
+    html+='<td class="mono">'+(m.z?fmtDollar(m.z):'\u2014')+'</td>';
+    html+='<td class="mono" style="color:var(--gold)">'+(m.d?fmtDollar(m.d):'\u2014')+'</td>';
+    html+='<td class="mono" style="color:#c4a8f5">'+(m.j?fmtDollar(m.j):'\u2014')+'</td>';
+    html+='<td class="mono" style="color:var(--muted)">'+(ytd?fmtDollar(ytd):'\u2014')+'</td></tr>';
+  });
+  html+='<tr style="border-top:2px solid var(--border);font-weight:600"><td>TOTAL</td><td>'+closed.length+'</td><td class="mono">'+fmtDollar(tG)+'</td><td class="mono">'+fmtDollar(tZ)+'</td><td class="mono" style="color:var(--gold)">'+fmtDollar(tD)+'</td><td class="mono" style="color:#c4a8f5">'+fmtDollar(tJ)+'</td><td class="mono">'+fmtDollar(tG)+'</td></tr>';
+  html+='</tbody></table></div></div>';
+
+  html+='<div class="card"><div class="card-title" style="margin-bottom:18px">Loan-by-Loan Detail</div><div class="table-wrap"><table>';
+  html+='<thead><tr><th>Borrower</th><th>Date</th><th>Loan Amt</th><th>Comp%</th><th>Gross</th><th>Zaphire%</th><th>Zaphire$</th><th>Deric%</th><th>Deric$</th><th>Jules%</th><th>Jules$</th><th>Tolerance</th></tr></thead><tbody>';
+  closed.forEach(function(l){
+    html+='<tr onclick="openLoanDetail('+l.id+')">';
+    html+='<td>'+esc(l.borrower)+'</td><td>'+fmtDate(l.closing_date)+'</td><td class="mono">'+fmtDollar(l.loan_amount)+'</td>';
+    html+='<td class="mono">'+(l.company_comp_pct||0)+'%</td><td class="mono">'+fmtDollar(l.gross_earnings)+'</td>';
+    html+='<td class="mono">'+(l.zaphire_pct||35)+'%</td><td class="mono">'+fmtDollar(l.zaphire_cut)+'</td>';
+    html+='<td class="mono">'+(l.deric_pct||32.5)+'%</td><td class="mono" style="color:var(--gold)">'+fmtDollar(l.deric_amount)+'</td>';
+    html+='<td class="mono">'+(l.jules_pct||32.5)+'%</td><td class="mono" style="color:#c4a8f5">'+fmtDollar(l.jules_amount||0)+'</td>';
+    html+='<td class="mono" style="color:'+(+(l.tolerance||0)?'var(--red)':'var(--muted)')+'">'+fmtDollar(l.tolerance||0)+'</td></tr>';
+  });
+  html+='</tbody></table></div></div>';
+  el.innerHTML=html;
+}
+
+// ── SETTINGS ─────────────────────────────────
+function renderSettings(){
+  var el=document.getElementById('content');
+  var s=state.settings;
+  var html='<div class="tabs">';
+  var tabs={dropdowns:'Dropdown Options',comp:'Compensation',general:'General'};
+  Object.keys(tabs).forEach(function(t){
+    html+='<div class="tab'+(settingsTab===t?' active':'')+'" onclick="settingsTab=\''+t+'\';renderSettings()">'+tabs[t]+'</div>';
+  });
+  html+='</div>';
+
+  if(settingsTab==='dropdowns'){
+    html+=tagEditor('Loan Types','loanTypes');
+    html+=tagEditor('Loan Statuses','loanStatuses');
+    html+=tagEditor('Loan Purposes','loanPurposes');
+    html+=tagEditor('MLO Names','mloNames');
+  } else if(settingsTab==='comp'){
+    html+='<div class="card"><div class="card-title" style="margin-bottom:18px">Default Compensation Splits</div><div class="form-grid">';
+    html+='<div class="form-group"><label>Company Comp % (default)</label><div class="input-prefix"><span>%</span><input type="number" step="0.1" value="'+s.zaphireCompPct+'" oninput="state.settings.zaphireCompPct=+this.value;saveSettings()"></div></div>';
+    html+='<div class="form-group"><label>Zaphire Split % (of gross)</label><div class="input-prefix"><span>%</span><input type="number" step="0.1" value="'+s.zaphireSplitPct+'" oninput="state.settings.zaphireSplitPct=+this.value;saveSettings()"></div></div>';
+    html+='<div class="form-group"><label>Deric Split % (of gross)</label><div class="input-prefix"><span>%</span><input type="number" step="0.1" value="'+s.dericSplitPct+'" oninput="state.settings.dericSplitPct=+this.value;saveSettings()"></div></div>';
+    html+='<div class="form-group"><label>Jules Split % (of gross)</label><div class="input-prefix"><span>%</span><input type="number" step="0.1" value="'+s.julesSplitPct+'" oninput="state.settings.julesSplitPct=+this.value;saveSettings()"></div></div>';
+    html+='</div></div>';
+  } else {
+    html+='<div class="card"><div class="card-title" style="margin-bottom:18px">General</div><div class="form-grid">';
+    html+='<div class="form-group"><label>Company Name</label><input type="text" value="'+esc(s.companyName)+'" oninput="state.settings.companyName=this.value;saveSettings()"></div>';
+    html+='</div></div>';
+  }
+  el.innerHTML=html;
+}
+
+function tagEditor(title,key){
+  var items=state.settings[key]||[];
+  var html='<div class="card" style="margin-bottom:16px">';
+  html+='<div class="card-header"><div><div class="card-title">'+title+'</div><div class="card-sub">'+items.length+' option'+(items.length!==1?'s':'')+'</div></div></div>';
+  html+='<div class="tag-list">';
+  items.forEach(function(item,i){
+    html+='<span class="tag">'+esc(item)+'<span class="tag-del" onclick="removeTag(\''+key+'\','+i+')">&#215;</span></span>';
+  });
+  html+='</div><div class="tag-add-row">';
+  html+='<input type="text" id="tag-input-'+key+'" placeholder="Add option..." style="max-width:240px">';
+  html+='<button class="btn btn-gold btn-sm" onclick="addTag(\''+key+'\')">Add</button></div></div>';
+  return html;
+}
+
+function addTag(key){
+  var input=document.getElementById('tag-input-'+key);
+  var val=input.value.trim();
+  if(!val) return;
+  if(!state.settings[key]) state.settings[key]=[];
+  if(state.settings[key].indexOf(val)<0) state.settings[key].push(val);
+  input.value='';
+  saveSettings();renderSettings();
+}
+function removeTag(key,idx){
+  state.settings[key].splice(idx,1);
+  saveSettings();renderSettings();
+}
+function saveSettings(){
+  apiUpsert('zt_settings',[{key:'main',value:JSON.stringify(state.settings)}])
+    .then(function(){setSyncStatus('saved','Saved \u2713');})
+    .catch(function(e){setSyncStatus('error','Save failed');});
+}
+
+// ── LOAN DETAIL MODAL ────────────────────────
+function openLoanDetail(id){
+  var l=state.loans.find(function(x){return x.id===id;});
+  if(!l) return;
+  var html='<div class="modal-title">'+esc(l.borrower)+'</div>';
+  html+='<div class="modal-sub">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+' &middot; '+fmtDate(l.closing_date)+'</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">';
+  html+=miniTile('var(--gold-light)','Gross',fmtDollar(l.gross_earnings));
+  html+=miniTile('var(--teal-light)','Zaphire '+(l.zaphire_pct||35)+'%',fmtDollar(l.zaphire_cut));
+  html+=miniTile('var(--gold)','Deric '+(l.deric_pct||32.5)+'%',fmtDollar(l.deric_amount));
+  html+=miniTile('#c4a8f5','Jules '+(l.jules_pct||32.5)+'%',fmtDollar(l.jules_amount||0));
+  html+='</div>';
+  html+='<div class="form-grid cols3" style="font-size:13px;margin-bottom:16px">';
+  html+='<div><div style="color:var(--muted);font-size:11px">STATUS</div>'+badge(l.status)+'</div>';
+  html+='<div><div style="color:var(--muted);font-size:11px">COMP %</div><div>'+(l.company_comp_pct||0)+'%</div></div>';
+  html+='<div><div style="color:var(--muted);font-size:11px">TOLERANCE</div><div style="color:'+(+(l.tolerance||0)?'var(--red)':'var(--muted)')+'">'+fmtDollar(l.tolerance||0)+'</div></div>';
+  html+='<div><div style="color:var(--muted);font-size:11px">EXP. CLOSE</div><div>'+(l.expected_close_date?fmtDate(l.expected_close_date):'\u2014')+'</div></div>';
+  html+='<div><div style="color:var(--muted);font-size:11px">EXP. FUND</div><div>'+(l.expected_fund_date?fmtDate(l.expected_fund_date):'\u2014')+'</div></div>';
+  html+='<div><div style="color:var(--muted);font-size:11px">LINKED</div><div>'+esc(l.loans_linked||'\u2014')+'</div></div>';
+  html+='</div>';
+  if(l.notes) html+='<div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:12px;font-size:13px;color:var(--muted);margin-bottom:12px"><strong style="color:var(--white)">Notes:</strong> '+esc(l.notes)+'</div>';
+  if(state.closedNotes[l.id]) html+='<div style="background:rgba(42,157,143,0.08);border:1px solid rgba(42,157,143,0.2);border-radius:8px;padding:12px;font-size:13px;color:var(--teal-light);margin-bottom:12px"><strong>File Notes:</strong> '+esc(state.closedNotes[l.id])+'</div>';
+  html+='<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button><button class="btn btn-teal" onclick="closeModal();editClosedNote('+l.id+')">&#9998; File Notes</button><button class="btn btn-gold" onclick="closeModal();openEditLoan('+l.id+')">&#9998; Edit Loan</button></div>';
+  openModal(html);
+}
+
+// ── LOAN FORM ────────────────────────────────
+function openAddLoan(){showLoanForm(null);}
+function openEditLoan(id){showLoanForm(id);}
+
+function showLoanForm(id){
+  var s=state.settings;
+  var l=id?state.loans.find(function(x){return x.id===id;}):null;
+  function v(field,def){
+    if(def===undefined) def='';
+    if(l) return l[field]!==undefined&&l[field]!==null?l[field]:def;
+    if(field==='company_comp_pct') return s.zaphireCompPct;
+    if(field==='zaphire_pct') return s.zaphireSplitPct||35;
+    if(field==='deric_pct') return s.dericSplitPct||32.5;
+    if(field==='jules_pct') return s.julesSplitPct||32.5;
+    return def;
+  }
+  var html='<div class="modal-title">'+(l?'Edit Loan':'Add New Loan')+'</div>';
+  html+='<div class="modal-sub">'+(l?esc(l.borrower):'Enter loan details below')+'</div>';
+  html+='<div class="form-grid">';
+  html+='<div class="form-group full"><label>Borrower Name(s)</label><input type="text" id="f-borrower" value="'+esc(v('borrower'))+'" placeholder="Last, First"></div>';
+  html+='<div class="form-group"><label>Loan Amount</label><div class="input-prefix"><span>$</span><input type="number" id="f-amount" value="'+v('loan_amount',0)+'" oninput="compPctChanged()"></div></div>';
+  html+='<div class="form-group"><label>Actual Closing Date <span style="color:var(--muted);font-weight:400">&#8212; fill once closed</span></label><input type="date" id="f-date" value="'+v('closing_date')+'"></div>';
+  html+='<div class="form-group"><label>Loan Type</label><select id="f-type">';
+  s.loanTypes.forEach(function(t){html+='<option value="'+esc(t)+'"'+(v('type')===t?' selected':'')+'>'+esc(t)+'</option>';});
+  html+='</select></div>';
+  html+='<div class="form-group"><label>Status</label><select id="f-status">';
+  s.loanStatuses.forEach(function(t){html+='<option value="'+esc(t)+'"'+(v('status','Active')===t?' selected':'')+'>'+esc(t)+'</option>';});
+  html+='</select></div>';
+  html+='</div>';
+
+  html+='<hr class="section-divider"><div class="section-label">Compensation</div>';
+  html+='<div class="form-grid cols3" style="margin-bottom:14px">';
+  html+='<div class="form-group"><label>Company Comp %</label><div class="input-prefix"><span>%</span><input type="number" id="f-comppct" step="0.1" value="'+v('company_comp_pct',2.5)+'" oninput="compPctChanged()"></div></div>';
+  html+='<div class="form-group"><label>Gross Earnings</label><div class="input-prefix"><span>$</span><input type="number" id="f-gross" step="0.01" value="'+v('gross_earnings',0)+'" oninput="grossChanged()"></div><span style="font-size:11px;color:var(--muted)">Loan Amt x Comp% or enter manually</span></div>';
+  html+='<div class="form-group"><label>Tolerance ($)</label><div class="input-prefix"><span>$</span><input type="number" id="f-tol" step="0.01" value="'+v('tolerance',0)+'" oninput="calcCompFields()"></div></div>';
+  html+='</div>';
+
+  // Split panel
+  html+='<div style="background:rgba(201,168,76,0.05);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">';
+  html+='<div style="font-size:11px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:16px;font-weight:600">Split Breakdown</div>';
+  html+='<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">';
+  html+='<div style="flex:1;text-align:center"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Adjusted Gross</div><div id="f-adj-display" style="font-family:\'JetBrains Mono\',monospace;font-size:20px;color:var(--gold-light)">$0.00</div><div style="font-size:10px;color:var(--muted)">Gross &minus; Tolerance</div></div>';
+  html+='<div style="font-size:22px;color:var(--muted)">&rarr;</div>';
+  html+='<div style="flex:1;text-align:center"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">MLO Remainder</div><div id="f-mlo-display" style="font-family:\'JetBrains Mono\',monospace;font-size:20px;color:var(--white)">$0.00</div><div id="f-mlo-pct" style="font-size:10px;color:var(--muted)">after Zaphire cut</div></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">';
+  html+=splitBox('var(--teal-light)','rgba(42,157,143,0.1)','rgba(42,157,143,0.35)','&#127974; Zaphire Capital','f-zaphire-pct',v('zaphire_pct',35),'f-zaphire',v('zaphire_cut',0),'zaphirePctChanged()','zaphireDollarChanged()');
+  html+=splitBox('var(--gold)','rgba(201,168,76,0.1)','rgba(201,168,76,0.35)','&#128188; Deric','f-deric-pct',v('deric_pct',32.5),'f-deric',v('deric_amount',0),'dericPctChanged()','dericDollarChanged()');
+  html+=splitBox('#c4a8f5','rgba(147,112,219,0.1)','rgba(147,112,219,0.35)','&#129309; Jules','f-jules-pct',v('jules_pct',32.5),'f-jules',v('jules_amount',0),'julesPctChanged()','julesDollarChanged()');
+  html+='</div>';
+  html+='<div id="f-split-check" style="margin-top:14px;padding:9px 14px;border-radius:6px;font-size:12px;text-align:center"></div>';
+  html+='</div>';
+
+  html+='<hr class="section-divider"><div class="section-label">Pipeline Dates &amp; Notes</div>';
+  html+='<div class="form-grid">';
+  html+='<div class="form-group"><label>Expected Close Date</label><input type="date" id="f-expected-close" value="'+v('expected_close_date')+'"></div>';
+  html+='<div class="form-group"><label>Expected Funding / Payout Date</label><input type="date" id="f-expected-fund" value="'+v('expected_fund_date')+'"></div>';
+  html+='<div class="form-group"><label>Loans Linked / Deposit Label</label><input type="text" id="f-linked" value="'+esc(v('loans_linked'))+'" placeholder="e.g. Graham, Jasmine"></div>';
+  html+='<div class="form-group full"><label>Pipeline Notes</label><textarea id="f-pipeline-notes" rows="2" placeholder="e.g. Waiting on appraisal...">'+esc(v('pipeline_notes'))+'</textarea></div>';
+  html+='<div class="form-group full"><label>General Notes</label><textarea id="f-notes" rows="2">'+esc(v('notes'))+'</textarea></div>';
+  html+='</div>';
+  html+='<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveLoan('+(id||'null')+')">'+(l?'Save Changes':'Add Loan')+'</button></div>';
+  openModal(html);
+  calcCompFields();
+}
+
+function splitBox(color,bg,border,label,pctId,pctVal,dolId,dolVal,pctEvt,dolEvt){
+  var html='<div style="background:'+bg+';border:1px solid '+border+';border-radius:8px;padding:14px">';
+  html+='<div style="font-size:10px;color:'+color+';text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;font-weight:600">'+label+'</div>';
+  html+='<div style="margin-bottom:8px"><label style="font-size:10px;color:var(--muted)">% of Gross</label>';
+  html+='<input type="number" id="'+pctId+'" step="0.1" value="'+pctVal+'" oninput="'+pctEvt+'" style="margin-top:3px;background:rgba(255,255,255,0.06);border:1px solid '+border+';border-radius:6px;color:var(--white);font-size:13px;padding:6px 8px;width:100%"></div>';
+  html+='<div><label style="font-size:10px;color:var(--muted)">Dollar Amount</label>';
+  html+='<input type="number" id="'+dolId+'" step="0.01" value="'+dolVal+'" oninput="'+dolEvt+'" style="margin-top:3px;background:rgba(255,255,255,0.06);border:1px solid '+border+';border-radius:6px;color:'+color+';font-size:14px;font-weight:600;padding:6px 8px;width:100%;font-family:\'JetBrains Mono\',monospace"></div>';
+  html+='</div>';
+  return html;
+}
+
+// ── COMP CALC ────────────────────────────────
+function getAdj(){var g=parseFloat(document.getElementById('f-gross').value)||0;var t=parseFloat(document.getElementById('f-tol').value)||0;return g-t;}
+function refreshSummary(adj){
+  var zDol=parseFloat(document.getElementById('f-zaphire').value)||0;
+  var rem=adj-zDol;
+  var a=document.getElementById('f-adj-display'),b=document.getElementById('f-mlo-display'),c=document.getElementById('f-mlo-pct');
+  if(a) a.textContent=fmtDollar(adj);
+  if(b) b.textContent=fmtDollar(rem);
+  if(c) c.textContent=adj>0?(rem/adj*100).toFixed(1)+'% of gross \u2192 Deric + Jules':'after Zaphire cut';
+}
+function checkBalance(adj){
+  var z=parseFloat(document.getElementById('f-zaphire').value)||0;
+  var d=parseFloat(document.getElementById('f-deric').value)||0;
+  var j=parseFloat(document.getElementById('f-jules').value)||0;
+  var diff=adj-(z+d+j);
+  var el=document.getElementById('f-split-check');if(!el) return;
+  var zP=adj>0?(z/adj*100).toFixed(1):0,dP=adj>0?(d/adj*100).toFixed(1):0,jP=adj>0?(j/adj*100).toFixed(1):0;
+  if(Math.abs(diff)<0.02){
+    el.style.cssText='margin-top:14px;padding:9px 14px;border-radius:6px;font-size:12px;text-align:center;background:rgba(45,198,83,0.1);color:var(--green);border:1px solid rgba(45,198,83,0.25)';
+    el.textContent='\u2713 Balanced \u2014 Zaphire '+zP+'% + Deric '+dP+'% + Jules '+jP+'% = 100% of '+fmtDollar(adj);
+  } else {
+    el.style.cssText='margin-top:14px;padding:9px 14px;border-radius:6px;font-size:12px;text-align:center;background:rgba(230,57,70,0.1);color:var(--red);border:1px solid rgba(230,57,70,0.25)';
+    el.textContent='\u26a0 '+fmtDollar(Math.abs(diff))+' '+(diff>0?'unallocated':'over-allocated')+' \u2014 '+zP+'% + '+dP+'% + '+jP+'% \u2260 100%';
+  }
+}
+function calcCompFields(){
+  var amt=parseFloat(document.getElementById('f-amount').value)||0;
+  var cPct=parseFloat(document.getElementById('f-comppct').value)||0;
+  var gEl=document.getElementById('f-gross');
+  if(gEl&&!gEl._manual) gEl.value=(amt*cPct/100).toFixed(2);
+  var adj=getAdj();
+  var zPct=parseFloat(document.getElementById('f-zaphire-pct').value)||0;
+  var dPct=parseFloat(document.getElementById('f-deric-pct').value)||0;
+  var jPct=parseFloat(document.getElementById('f-jules-pct').value)||0;
+  var zEl=document.getElementById('f-zaphire'),dEl=document.getElementById('f-deric'),jEl=document.getElementById('f-jules');
+  if(zEl) zEl.value=(adj*zPct/100).toFixed(2);
+  if(dEl) dEl.value=(adj*dPct/100).toFixed(2);
+  if(jEl) jEl.value=(adj*jPct/100).toFixed(2);
+  refreshSummary(adj);checkBalance(adj);
+}
+function compPctChanged(){var amt=parseFloat(document.getElementById('f-amount').value)||0;var cPct=parseFloat(document.getElementById('f-comppct').value)||0;var gEl=document.getElementById('f-gross');if(gEl){gEl.value=(amt*cPct/100).toFixed(2);gEl._manual=false;}calcCompFields();}
+function grossChanged(){var amt=parseFloat(document.getElementById('f-amount').value)||0;var g=parseFloat(document.getElementById('f-gross').value)||0;var gEl=document.getElementById('f-gross');if(gEl) gEl._manual=true;var cEl=document.getElementById('f-comppct');if(cEl&&amt>0) cEl.value=(g/amt*100).toFixed(4);calcCompFields();}
+function zaphirePctChanged(){var adj=getAdj();var pct=parseFloat(document.getElementById('f-zaphire-pct').value)||0;var el=document.getElementById('f-zaphire');if(el) el.value=(adj*pct/100).toFixed(2);refreshSummary(adj);checkBalance(adj);}
+function zaphireDollarChanged(){var adj=getAdj();var dol=parseFloat(document.getElementById('f-zaphire').value)||0;var el=document.getElementById('f-zaphire-pct');if(el) el.value=adj>0?(dol/adj*100).toFixed(2):'0';refreshSummary(adj);checkBalance(adj);}
+function dericPctChanged(){var adj=getAdj();var pct=parseFloat(document.getElementById('f-deric-pct').value)||0;var el=document.getElementById('f-deric');if(el) el.value=(adj*pct/100).toFixed(2);checkBalance(adj);}
+function dericDollarChanged(){var adj=getAdj();var dol=parseFloat(document.getElementById('f-deric').value)||0;var el=document.getElementById('f-deric-pct');if(el) el.value=adj>0?(dol/adj*100).toFixed(2):'0';checkBalance(adj);}
+function julesPctChanged(){var adj=getAdj();var pct=parseFloat(document.getElementById('f-jules-pct').value)||0;var el=document.getElementById('f-jules');if(el) el.value=(adj*pct/100).toFixed(2);checkBalance(adj);}
+function julesDollarChanged(){var adj=getAdj();var dol=parseFloat(document.getElementById('f-jules').value)||0;var el=document.getElementById('f-jules-pct');if(el) el.value=adj>0?(dol/adj*100).toFixed(2):'0';checkBalance(adj);}
+
+// ── SAVE / DELETE LOAN ───────────────────────
+function saveLoan(id){
+  var borrower=document.getElementById('f-borrower').value.trim();
+  if(!borrower){alert('Borrower name is required.');return;}
+  var gross=parseFloat(document.getElementById('f-gross').value)||0;
+  var tol=parseFloat(document.getElementById('f-tol').value)||0;
+  function dateOrNull(field){var v=document.getElementById(field).value;return v||null;}
+  var data={
+    borrower:borrower,
+    loan_amount:parseFloat(document.getElementById('f-amount').value)||0,
+    closing_date:dateOrNull('f-date'),
+    type:document.getElementById('f-type').value,
+    status:document.getElementById('f-status').value,
+    company_comp_pct:parseFloat(document.getElementById('f-comppct').value)||0,
+    gross_earnings:gross,
+    tolerance:tol,
+    zaphire_pct:parseFloat(document.getElementById('f-zaphire-pct').value)||35,
+    zaphire_cut:parseFloat(document.getElementById('f-zaphire').value)||0,
+    deric_pct:parseFloat(document.getElementById('f-deric-pct').value)||32.5,
+    deric_amount:parseFloat(document.getElementById('f-deric').value)||0,
+    jules_pct:parseFloat(document.getElementById('f-jules-pct').value)||32.5,
+    jules_amount:parseFloat(document.getElementById('f-jules').value)||0,
+    expected_close_date:dateOrNull('f-expected-close'),
+    expected_fund_date:dateOrNull('f-expected-fund'),
+    loans_linked:document.getElementById('f-linked').value.trim(),
+    pipeline_notes:document.getElementById('f-pipeline-notes').value.trim(),
+    notes:document.getElementById('f-notes').value.trim()
+  };
+  setSyncStatus('saving','Saving...');
+  var promise=id?apiPatch('zt_loans',id,data):apiPost('zt_loans',[data]);
+  promise.then(function(result){
+    var saved=Array.isArray(result)?result[0]:result;
+    if(id){
+      var idx=state.loans.findIndex(function(x){return x.id===id;});
+      if(idx>=0) state.loans[idx]=saved;
+    } else {
+      state.loans.push(saved);
+    }
+    setSyncStatus('saved','Saved \u2713');
+    closeModal();showPage(currentPage);
+  }).catch(function(e){setSyncStatus('error','Save failed');alert('Error saving loan: '+e.message);});
+}
+
+function deleteLoan(id){
+  if(!confirm('Delete this loan? This cannot be undone.')) return;
+  setSyncStatus('saving','Deleting...');
+  apiDelete('zt_loans',id).then(function(){
+    state.loans=state.loans.filter(function(l){return l.id!==id;});
+    setSyncStatus('saved','Saved \u2713');
+    showPage(currentPage);
+  }).catch(function(e){setSyncStatus('error','Delete failed');alert('Error: '+e.message);});
+}
+
+// ── MODAL ────────────────────────────────────
+function openModal(html){document.getElementById('modal-content').innerHTML=html;document.getElementById('modal-overlay').style.display='flex';}
+function closeModal(){document.getElementById('modal-overlay').style.display='none';}
+
+// ── PASSWORD GATE ─────────────────────────────
+// Change this to whatever password you want
+var APP_PASSWORD = 'Zaphire2024!';
+
+function checkPassword() {
+  var input = document.getElementById('lock-input');
+  var err = document.getElementById('lock-err');
+  if(input.value === APP_PASSWORD) {
+    // Store session so refreshing doesn't re-prompt (expires when tab closes)
+    try { sessionStorage.setItem('zc_auth', '1'); } catch(e) {}
+    document.getElementById('lock-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    initApp();
+  } else {
+    err.textContent = 'Incorrect password. Please try again.';
+    input.value = '';
+    input.focus();
+    // Shake animation
+    input.style.borderColor = 'var(--red)';
+    setTimeout(function(){ input.style.borderColor = ''; }, 1500);
+  }
+}
+
+// ── START ────────────────────────────────────
+// Check if already authenticated this session
+try {
+  if(sessionStorage.getItem('zc_auth') === '1') {
+    document.getElementById('lock-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    initApp();
+  } else {
+    // Focus password field
+    setTimeout(function(){ var el=document.getElementById('lock-input'); if(el) el.focus(); }, 100);
+  }
+} catch(e) {
+  // sessionStorage blocked — just show lock screen
+  setTimeout(function(){ var el=document.getElementById('lock-input'); if(el) el.focus(); }, 100);
+}
+</script>
+</body>
+</html>
