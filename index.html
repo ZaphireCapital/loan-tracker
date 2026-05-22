@@ -764,26 +764,129 @@ function renderEarnings(){
   var tG=0,tZ=0,tD=0,tJ=0;
   closed.forEach(function(l){tG+=+(l.gross_earnings||0);tZ+=+(l.zaphire_cut||0);tD+=+(l.deric_amount||0);tJ+=+(l.jules_amount||0);});
 
-  var html='<div class="stat-grid" style="margin-bottom:24px">';
+  // ── Deric income projections ──
+  var now = new Date();
+  var currentMonth = now.getMonth(); // 0-based
+  var currentYear = now.getFullYear();
+  var dayOfYear = Math.floor((now - new Date(currentYear,0,1)) / 86400000) + 1;
+  var daysInYear = ((currentYear%4===0&&currentYear%100!==0)||currentYear%400===0) ? 366 : 365;
+
+  // Months that have passed — up to and including current month index
+  // e.g. if we are in May (month 4), months elapsed = 5 (Jan-May)
+  // Use fractional month: day of year / (days in year / 12)
+  var monthsElapsed = dayOfYear / (daysInYear / 12);
+  var monthsElapsedWhole = currentMonth + 1; // whole months that have started
+
+  // YTD Deric = only from this calendar year
+  var ytdDeric = 0;
+  mData.forEach(function(m,i){
+    if(i <= currentMonth) ytdDeric += m.d;
+  });
+
+  // Monthly average = YTD / months elapsed (fractional, so partial month counts)
+  var monthlyAvg = monthsElapsed > 0 ? ytdDeric / monthsElapsed : 0;
+
+  // Pace = monthly avg * 12
+  var annualPace = monthlyAvg * 12;
+
+  // Remaining projected = monthly avg * months remaining
+  var monthsRemaining = 12 - monthsElapsed;
+  var remainingProjected = monthlyAvg * monthsRemaining;
+
+  // Best month
+  var bestMonthD = 0, bestMonthName = 'N/A';
+  mData.forEach(function(m,i){ if(m.d > bestMonthD){ bestMonthD=m.d; bestMonthName=mNames[i]; }});
+
+  var html='';
+
+  // ── Deric Income Summary card ──
+  html+='<div class="card" style="margin-bottom:24px;border-color:rgba(201,168,76,0.35)">';
+  html+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">';
+  html+='<div style="font-size:28px">&#128188;</div>';
+  html+='<div><div class="card-title">Deric\'s Income Summary</div><div class="card-sub">'+currentYear+' performance &amp; projections &mdash; as of '+now.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</div></div>';
+  html+='</div>';
+
+  // Four big stat tiles
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">';
+
+  // YTD
+  html+='<div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.3);border-radius:12px;padding:18px;text-align:center;position:relative;overflow:hidden">';
+  html+='<div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold)"></div>';
+  html+='<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">YTD Earnings</div>';
+  html+='<div style="font-family:\'JetBrains Mono\',monospace;font-size:22px;color:var(--gold);font-weight:500">'+fmtDollar(ytdDeric)+'</div>';
+  html+='<div style="font-size:11px;color:var(--muted);margin-top:6px">'+mNames[0]+' &ndash; '+mNames[currentMonth]+'</div>';
+  html+='</div>';
+
+  // Monthly avg
+  html+='<div style="background:rgba(42,157,143,0.08);border:1px solid rgba(42,157,143,0.25);border-radius:12px;padding:18px;text-align:center;position:relative;overflow:hidden">';
+  html+='<div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--teal)"></div>';
+  html+='<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Monthly Average</div>';
+  html+='<div style="font-family:\'JetBrains Mono\',monospace;font-size:22px;color:var(--teal-light);font-weight:500">'+fmtDollar(monthlyAvg)+'</div>';
+  html+='<div style="font-size:11px;color:var(--muted);margin-top:6px">YTD &divide; '+monthsElapsed.toFixed(1)+' months</div>';
+  html+='</div>';
+
+  // Annual pace
+  html+='<div style="background:rgba(45,198,83,0.08);border:1px solid rgba(45,198,83,0.25);border-radius:12px;padding:18px;text-align:center;position:relative;overflow:hidden">';
+  html+='<div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--green)"></div>';
+  html+='<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Annual Pace</div>';
+  html+='<div style="font-family:\'JetBrains Mono\',monospace;font-size:22px;color:var(--green);font-weight:500">'+fmtDollar(annualPace)+'</div>';
+  html+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Monthly avg &times; 12</div>';
+  html+='</div>';
+
+  // Projected remaining
+  html+='<div style="background:rgba(147,112,219,0.08);border:1px solid rgba(147,112,219,0.25);border-radius:12px;padding:18px;text-align:center;position:relative;overflow:hidden">';
+  html+='<div style="position:absolute;top:0;left:0;right:0;height:3px;background:#9370db"></div>';
+  html+='<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Projected Remaining</div>';
+  html+='<div style="font-family:\'JetBrains Mono\',monospace;font-size:22px;color:#c4a8f5;font-weight:500">'+fmtDollar(remainingProjected)+'</div>';
+  html+='<div style="font-size:11px;color:var(--muted);margin-top:6px">'+monthsRemaining.toFixed(1)+' months left at avg</div>';
+  html+='</div>';
+
+  html+='</div>';
+
+  // Progress bar toward annual pace
+  var progressPct = annualPace > 0 ? Math.min(100, (ytdDeric / annualPace) * 100) : 0;
+  var progressPctDisplay = (ytdDeric / (annualPace||1) * 100).toFixed(1);
+  html+='<div style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">';
+  html+='<div style="font-size:12px;color:var(--muted)">Year progress: <strong style="color:var(--white)">'+progressPctDisplay+'%</strong> of projected annual earnings</div>';
+  html+='<div style="font-size:12px;color:var(--muted)">Best month: <strong style="color:var(--gold)">'+bestMonthName+' ('+fmtDollar(bestMonthD)+')</strong></div>';
+  html+='</div>';
+  html+='<div style="background:rgba(255,255,255,0.06);border-radius:6px;height:10px;overflow:hidden">';
+  html+='<div style="height:100%;width:'+progressPct+'%;background:linear-gradient(90deg,var(--gold),var(--green));border-radius:6px;transition:width 0.5s"></div>';
+  html+='</div>';
+
+  // How the projection works
+  html+='<div style="margin-top:14px;padding:12px 14px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:12px;color:var(--muted);line-height:1.7">';
+  html+='<strong style="color:var(--white)">How these are calculated:</strong><br>';
+  html+='YTD: sum of all Deric payments on closed loans this calendar year &nbsp;&middot;&nbsp; ';
+  html+='Monthly Avg: YTD &divide; '+monthsElapsed.toFixed(2)+' months elapsed (including partial current month) &nbsp;&middot;&nbsp; ';
+  html+='Annual Pace: monthly avg &times; 12 &nbsp;&middot;&nbsp; ';
+  html+='Projected Remaining: monthly avg &times; '+monthsRemaining.toFixed(2)+' months left in year';
+  html+='</div>';
+  html+='</div>';
+
+  // Overall summary tiles
+  html+='<div class="stat-grid" style="margin-bottom:24px">';
   html+=statTile('','YTD Gross','<span class="gold">'+fmtDollar(tG)+'</span>','All closed');
   html+=statTile('teal','Zaphire Total',fmtDollar(tZ),'Company share');
-  html+=statTile('green','Deric Total',fmtDollar(tD),'YTD');
-  html+=statTile('','Jules Total','<span style="color:#c4a8f5">'+fmtDollar(tJ)+'</span>','YTD');
+  html+=statTile('green','Deric Total',fmtDollar(tD),'All time');
+  html+=statTile('','Jules Total','<span style="color:#c4a8f5">'+fmtDollar(tJ)+'</span>','All time');
   html+='</div>';
 
   html+='<div class="card" style="margin-bottom:20px"><div class="card-title" style="margin-bottom:18px">Monthly Breakdown</div><div class="table-wrap"><table>';
-  html+='<thead><tr><th>Month</th><th>Loans</th><th>Gross</th><th>Zaphire</th><th>Deric</th><th>Jules</th><th>YTD Gross</th></tr></thead><tbody>';
-  var ytd=0;
+  html+='<thead><tr><th>Month</th><th>Loans</th><th>Gross</th><th>Zaphire</th><th>Deric</th><th>Jules</th><th>Deric YTD</th></tr></thead><tbody>';
+  var ytdRunning=0;
   mData.forEach(function(m,i){
-    ytd+=m.gross;
-    html+='<tr><td>'+mNames[i]+'</td><td>'+m.loans.length+'</td>';
+    ytdRunning+=m.d;
+    var isCurrentMonth = i===currentMonth;
+    var rowStyle = isCurrentMonth ? 'background:rgba(201,168,76,0.05)' : '';
+    html+='<tr style="'+rowStyle+'"><td>'+mNames[i]+(isCurrentMonth?' <span style="font-size:10px;color:var(--gold);margin-left:4px">&#9664; now</span>':'')+'</td><td>'+m.loans.length+'</td>';
     html+='<td class="mono">'+(m.gross?fmtDollar(m.gross):'\u2014')+'</td>';
     html+='<td class="mono">'+(m.z?fmtDollar(m.z):'\u2014')+'</td>';
     html+='<td class="mono" style="color:var(--gold)">'+(m.d?fmtDollar(m.d):'\u2014')+'</td>';
     html+='<td class="mono" style="color:#c4a8f5">'+(m.j?fmtDollar(m.j):'\u2014')+'</td>';
-    html+='<td class="mono" style="color:var(--muted)">'+(ytd?fmtDollar(ytd):'\u2014')+'</td></tr>';
+    html+='<td class="mono" style="color:'+(ytdRunning?'var(--gold-light)':'var(--muted)')+'">'+(ytdRunning?fmtDollar(ytdRunning):'\u2014')+'</td></tr>';
   });
-  html+='<tr style="border-top:2px solid var(--border);font-weight:600"><td>TOTAL</td><td>'+closed.length+'</td><td class="mono">'+fmtDollar(tG)+'</td><td class="mono">'+fmtDollar(tZ)+'</td><td class="mono" style="color:var(--gold)">'+fmtDollar(tD)+'</td><td class="mono" style="color:#c4a8f5">'+fmtDollar(tJ)+'</td><td class="mono">'+fmtDollar(tG)+'</td></tr>';
+  html+='<tr style="border-top:2px solid var(--border);font-weight:600"><td>TOTAL</td><td>'+closed.length+'</td><td class="mono">'+fmtDollar(tG)+'</td><td class="mono">'+fmtDollar(tZ)+'</td><td class="mono" style="color:var(--gold)">'+fmtDollar(tD)+'</td><td class="mono" style="color:#c4a8f5">'+fmtDollar(tJ)+'</td><td class="mono" style="color:var(--gold-light)">'+fmtDollar(ytdDeric)+'</td></tr>';
   html+='</tbody></table></div></div>';
 
   html+='<div class="card"><div class="card-title" style="margin-bottom:18px">Loan-by-Loan Detail</div><div class="table-wrap"><table>';
