@@ -168,6 +168,7 @@ textarea{resize:vertical;min-height:80px;}
       <div class="nav-label">Tools</div>
       <div class="nav-item" id="nav-earnings" onclick="showPage('earnings')"><span class="icon">💰</span> Earnings</div>
       <div class="nav-item" id="nav-settings" onclick="showPage('settings')"><span class="icon">⚙️</span> Settings</div>
+      <div class="nav-item" id="nav-trash" onclick="showPage('trash')"><span class="icon">🗑️</span> Trash <span id="trash-count" style="margin-left:auto;background:rgba(230,57,70,0.2);color:var(--red);border-radius:10px;padding:1px 7px;font-size:10px;display:none"></span></div>
     </div>
     <div class="sidebar-footer">
       <div class="sync-status">
@@ -230,6 +231,7 @@ function supa(table) {
 // ── STATE ─────────────────────────────────────
 var state = {
   loans: [],
+  trash: [],
   settings: {
     loanTypes:['Purchase','Refinance','HELOC','FHA','VA','Conventional','Jumbo'],
     loanStatuses:['Active','Pending','Closed','On Hold','Cancelled'],
@@ -329,14 +331,11 @@ function apiUpsert(table, data) {
 // ── INIT / LOAD ───────────────────────────────
 function initApp() {
   setSyncStatus('loading', 'Connecting...');
-  // Load loans and settings in parallel
   Promise.all([
     apiGet('zt_loans', 'select=*'),
     apiGet('zt_settings', 'select=*')
   ]).then(function(results) {
     var loans = results[0];
-    var settingsRows = results[1];
-
     // If no loans exist yet, seed with default data
     if(!loans || loans.length === 0) {
       return seedDefaultData().then(function() {
@@ -348,31 +347,45 @@ function initApp() {
     }
     return results;
   }).then(function(results) {
-    state.loans = results[0] || [];
+    // Separate active loans from trashed ones
+    var allLoans = results[0] || [];
+    state.loans = allLoans.filter(function(l){ return !l.deleted_at; });
+    state.trash = allLoans.filter(function(l){ return !!l.deleted_at; });
     var settingsRows = results[1] || [];
-    // Parse settings from key/value rows
     settingsRows.forEach(function(row) {
-      try {
-        if(row.key === 'main') state.settings = JSON.parse(row.value);
-      } catch(e) {}
+      try { if(row.key === 'main') state.settings = JSON.parse(row.value); } catch(e) {}
     });
-    // Load closed notes
     return apiGet('zt_notes', 'select=*');
   }).then(function(notes) {
-    (notes||[]).forEach(function(n) {
-      state.closedNotes[n.loan_id] = n.note;
-    });
+    (notes||[]).forEach(function(n) { state.closedNotes[n.loan_id] = n.note; });
+    updateTrashBadge();
     setSyncStatus('connected', 'Synced \u2713');
     showPage('dashboard');
   }).catch(function(err) {
     setSyncStatus('error', 'Connection error');
-    // Check if tables don't exist yet
     if(err.message && err.message.indexOf('42P01') > -1) {
       document.getElementById('content').innerHTML = needsSetupHtml();
     } else {
-      document.getElementById('content').innerHTML = '<div style="padding:40px;color:var(--red);line-height:2"><strong>Connection error:</strong><br>' + err.message + '<br><br>Make sure the Supabase tables are created. See the Setup tab.</div>';
+      document.getElementById('content').innerHTML = '<div style="padding:40px;color:var(--red);line-height:2"><strong>Connection error:</strong><br>' + err.message + '</div>';
     }
   });
+}
+
+function updateTrashBadge() {
+  // Auto-expire trash older than 30 days from display
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  state.trash = (state.trash||[]).filter(function(l){
+    return new Date(l.deleted_at) > cutoff;
+  });
+  var el = document.getElementById('trash-count');
+  if(!el) return;
+  if(state.trash && state.trash.length > 0) {
+    el.textContent = state.trash.length;
+    el.style.display = 'inline';
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 function seedDefaultData() {
@@ -476,11 +489,11 @@ var settingsTab = 'dropdowns';
 
 function showPage(page) {
   currentPage = page;
-  ['dashboard','loans','closed','earnings','settings'].forEach(function(p) {
+  ['dashboard','loans','closed','earnings','settings','trash'].forEach(function(p) {
     var el = document.getElementById('nav-' + p);
     if(el) el.className = 'nav-item' + (p===page?' active':'');
   });
-  var titles = {dashboard:'Dashboard',loans:'Active Loans',closed:'Closed Files',earnings:'Earnings & Payouts',settings:'Settings'};
+  var titles = {dashboard:'Dashboard',loans:'Active Loans',closed:'Closed Files',earnings:'Earnings & Payouts',settings:'Settings',trash:'Trash'};
   document.getElementById('page-title').textContent = titles[page] || page;
   var acts = document.getElementById('topbar-actions');
   if(page==='dashboard'||page==='loans') {
@@ -489,7 +502,7 @@ function showPage(page) {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button>';
   }
   document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
-  var renders = {dashboard:renderDashboard, loans:renderLoans, closed:renderClosed, earnings:renderEarnings, settings:renderSettings};
+  var renders = {dashboard:renderDashboard, loans:renderLoans, closed:renderClosed, earnings:renderEarnings, settings:renderSettings, trash:renderTrash};
   setTimeout(function() {
     try { (renders[page]||renderDashboard)(); }
     catch(e) { document.getElementById('content').innerHTML = '<div style="padding:40px;color:var(--red)">Error: ' + e.message + '</div>'; }
@@ -1047,14 +1060,103 @@ function saveLoan(id){
   }).catch(function(e){setSyncStatus('error','Save failed');alert('Error saving loan: '+e.message);});
 }
 
-function deleteLoan(id){
-  if(!confirm('Delete this loan? This cannot be undone.')) return;
-  setSyncStatus('saving','Deleting...');
-  apiDelete('zt_loans',id).then(function(){
-    state.loans=state.loans.filter(function(l){return l.id!==id;});
-    setSyncStatus('saved','Saved \u2713');
+// ── SOFT DELETE — moves to trash ─────────────
+function deleteLoan(id) {
+  if(!confirm('Move this loan to Trash? It will be automatically deleted after 30 days.')) return;
+  setSyncStatus('saving', 'Moving to trash...');
+  var now = new Date().toISOString();
+  apiPatch('zt_loans', id, {deleted_at: now}).then(function() {
+    var loan = state.loans.find(function(l){return l.id===id;});
+    if(loan) { loan.deleted_at = now; state.trash.push(loan); }
+    state.loans = state.loans.filter(function(l){return l.id!==id;});
+    updateTrashBadge();
+    setSyncStatus('saved', 'Moved to trash \u2713');
     showPage(currentPage);
-  }).catch(function(e){setSyncStatus('error','Delete failed');alert('Error: '+e.message);});
+  }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
+}
+
+// ── RESTORE from trash ────────────────────────
+function restoreLoan(id) {
+  setSyncStatus('saving', 'Restoring...');
+  apiPatch('zt_loans', id, {deleted_at: null}).then(function() {
+    var loan = state.trash.find(function(l){return l.id===id;});
+    if(loan) { loan.deleted_at = null; state.loans.push(loan); }
+    state.trash = state.trash.filter(function(l){return l.id!==id;});
+    updateTrashBadge();
+    setSyncStatus('saved', 'Restored \u2713');
+    renderTrash();
+  }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
+}
+
+// ── PERMANENT DELETE ──────────────────────────
+function permanentDeleteLoan(id) {
+  if(!confirm('Permanently delete this loan? This CANNOT be undone.')) return;
+  setSyncStatus('saving', 'Deleting...');
+  apiDelete('zt_loans', id).then(function() {
+    state.trash = state.trash.filter(function(l){return l.id!==id;});
+    updateTrashBadge();
+    setSyncStatus('saved', 'Deleted \u2713');
+    renderTrash();
+  }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
+}
+
+// ── EMPTY TRASH ───────────────────────────────
+function emptyTrash() {
+  if(!confirm('Permanently delete ALL items in trash? This CANNOT be undone.')) return;
+  setSyncStatus('saving', 'Emptying trash...');
+  var ids = state.trash.map(function(l){return l.id;});
+  var deletes = ids.map(function(id){return apiDelete('zt_loans',id);});
+  Promise.all(deletes).then(function(){
+    state.trash = [];
+    updateTrashBadge();
+    setSyncStatus('saved', 'Trash emptied \u2713');
+    renderTrash();
+  }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
+}
+
+// ── RENDER TRASH PAGE ─────────────────────────
+function renderTrash() {
+  var el = document.getElementById('content');
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  var items = (state.trash||[]).slice().sort(function(a,b){
+    return (b.deleted_at||'') > (a.deleted_at||'') ? 1 : -1;
+  });
+
+  var html = '<div class="card">';
+  html += '<div class="card-header"><div><div class="card-title">&#128465; Trash</div>';
+  html += '<div class="card-sub">Loans are permanently deleted after 30 days</div></div>';
+  if(items.length) {
+    html += '<button class="btn btn-danger btn-sm" onclick="emptyTrash()">Empty Trash</button>';
+  }
+  html += '</div>';
+
+  if(!items.length) {
+    html += '<div style="text-align:center;padding:60px;color:var(--muted)"><div style="font-size:48px;margin-bottom:12px;opacity:0.3">&#128465;</div><div style="font-size:14px">Trash is empty</div></div>';
+  } else {
+    items.forEach(function(l) {
+      var deletedDate = new Date(l.deleted_at);
+      var expireDate = new Date(l.deleted_at);
+      expireDate.setDate(expireDate.getDate() + 30);
+      var daysLeft = Math.ceil((expireDate - new Date()) / 86400000);
+      var urgColor = daysLeft <= 3 ? 'var(--red)' : daysLeft <= 7 ? '#f4a261' : 'var(--muted)';
+
+      html += '<div style="border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:16px;opacity:0.85">';
+      html += '<div style="flex:1">';
+      html += '<div style="font-weight:600;font-size:14px;color:var(--white);margin-bottom:4px">'+esc(l.borrower)+'</div>';
+      html += '<div style="font-size:12px;color:var(--muted)">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+' &middot; '+badge(l.status)+'</div>';
+      html += '<div style="font-size:11px;margin-top:6px"><span style="color:var(--muted)">Deleted: '+deletedDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</span>';
+      html += ' &nbsp;&middot;&nbsp; <span style="color:'+urgColor+'">';
+      html += daysLeft > 0 ? 'Auto-deletes in '+daysLeft+' day'+(daysLeft!==1?'s':'') : 'Expires today';
+      html += '</span></div></div>';
+      html += '<div style="display:flex;gap:8px;flex-shrink:0">';
+      html += '<button class="btn btn-teal btn-sm" onclick="restoreLoan('+l.id+')">&#8617; Restore</button>';
+      html += '<button class="btn btn-danger btn-sm" onclick="permanentDeleteLoan('+l.id+')">Delete Forever</button>';
+      html += '</div></div>';
+    });
+  }
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 // ── MODAL ────────────────────────────────────
