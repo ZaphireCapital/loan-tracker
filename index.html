@@ -909,7 +909,7 @@ function renderSettings(){
   var el=document.getElementById('content');
   var s=state.settings;
   var html='<div class="tabs">';
-  var tabs={dropdowns:'Dropdown Options',comp:'Compensation',general:'General'};
+  var tabs={dropdowns:'Dropdown Options',comp:'Compensation',backup:'&#128190; Backup',general:'General'};
   Object.keys(tabs).forEach(function(t){
     html+='<div class="tab'+(settingsTab===t?' active':'')+'" onclick="settingsTab=\''+t+'\';renderSettings()">'+tabs[t]+'</div>';
   });
@@ -927,6 +927,8 @@ function renderSettings(){
     html+='<div class="form-group"><label>Deric Split % (of gross)</label><div class="input-prefix"><span>%</span><input type="number" step="0.1" value="'+s.dericSplitPct+'" oninput="state.settings.dericSplitPct=+this.value;saveSettings()"></div></div>';
     html+='<div class="form-group"><label>Jules Split % (of gross)</label><div class="input-prefix"><span>%</span><input type="number" step="0.1" value="'+s.julesSplitPct+'" oninput="state.settings.julesSplitPct=+this.value;saveSettings()"></div></div>';
     html+='</div></div>';
+  } else if(settingsTab==='backup'){
+    html+=renderBackupTab();
   } else {
     html+='<div class="card"><div class="card-title" style="margin-bottom:18px">General</div><div class="form-grid">';
     html+='<div class="form-group"><label>Company Name</label><input type="text" value="'+esc(s.companyName)+'" oninput="state.settings.companyName=this.value;saveSettings()"></div>';
@@ -966,6 +968,200 @@ function saveSettings(){
   apiUpsert('zt_settings',[{key:'main',value:JSON.stringify(state.settings)}])
     .then(function(){setSyncStatus('saved','Saved \u2713');})
     .catch(function(e){setSyncStatus('error','Save failed');});
+}
+
+// ── BACKUP ───────────────────────────────────
+function downloadBackup() {
+  var btn = document.getElementById('backup-btn');
+  var status = document.getElementById('backup-status');
+  if(btn) { btn.textContent = 'Pulling data...'; btn.disabled = true; }
+  if(status) { status.textContent = ''; }
+
+  // Fetch all three tables fresh from Supabase
+  Promise.all([
+    apiGet('zt_loans', 'select=*'),
+    apiGet('zt_settings', 'select=*'),
+    apiGet('zt_notes', 'select=*')
+  ]).then(function(results) {
+    var backup = {
+      exported_at: new Date().toISOString(),
+      exported_by: 'Zaphire Capital Loan Tracker',
+      version: '1.0',
+      supabase_project: 'ordrazjxfucogkjykpcf',
+      summary: {
+        total_loans: (results[0]||[]).length,
+        active_loans: (results[0]||[]).filter(function(l){return l.status==='Active';}).length,
+        closed_loans: (results[0]||[]).filter(function(l){return l.status==='Closed';}).length,
+        trashed_loans: (results[0]||[]).filter(function(l){return !!l.deleted_at;}).length,
+        total_notes: (results[2]||[]).length
+      },
+      tables: {
+        zt_loans:    results[0] || [],
+        zt_settings: results[1] || [],
+        zt_notes:    results[2] || []
+      }
+    };
+
+    var json = JSON.stringify(backup, null, 2);
+    var blob = new Blob([json], {type: 'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var date = new Date().toISOString().slice(0,10);
+    a.href = url;
+    a.download = 'ZaphireCapital_Backup_' + date + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if(btn) { btn.textContent = '\u2713 Backup Downloaded'; btn.disabled = false; }
+    if(status) {
+      status.style.color = 'var(--green)';
+      status.textContent = backup.summary.total_loans + ' loans, ' + backup.summary.total_notes + ' notes exported on ' + new Date().toLocaleString();
+    }
+  }).catch(function(e) {
+    if(btn) { btn.textContent = 'Download Backup'; btn.disabled = false; }
+    if(status) { status.style.color = 'var(--red)'; status.textContent = 'Error: ' + e.message; }
+  });
+}
+
+function renderBackupTab() {
+  var loanCount = state.loans.length;
+  var closedCount = state.loans.filter(function(l){return l.status==='Closed';}).length;
+  var noteCount = Object.keys(state.closedNotes).length;
+  var trashCount = (state.trash||[]).length;
+
+  var html = '';
+
+  // ── Big download button card ──
+  html += '<div class="card" style="margin-bottom:20px;border-color:rgba(201,168,76,0.35)">';
+  html += '<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">';
+  html += '<div style="flex:1;min-width:200px">';
+  html += '<div class="card-title" style="margin-bottom:6px">&#128190; Download Full Backup</div>';
+  html += '<div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:12px">';
+  html += 'Pulls all your data live from Supabase and downloads it as a single JSON file. ';
+  html += 'Contains every loan, every note, and all your settings — everything needed to rebuild on any platform.';
+  html += '</div>';
+  html += '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">';
+  html += '<span style="color:var(--white)">'+loanCount+'</span> loans &nbsp;&middot;&nbsp; ';
+  html += '<span style="color:var(--white)">'+closedCount+'</span> closed &nbsp;&middot;&nbsp; ';
+  html += '<span style="color:var(--white)">'+noteCount+'</span> file notes &nbsp;&middot;&nbsp; ';
+  html += '<span style="color:var(--white)">'+trashCount+'</span> in trash';
+  html += '</div>';
+  html += '<button id="backup-btn" class="btn btn-gold" onclick="downloadBackup()" style="font-size:14px;padding:12px 28px">&#11123; Download Backup</button>';
+  html += '<div id="backup-status" style="margin-top:10px;font-size:12px;min-height:18px"></div>';
+  html += '</div>';
+  html += '<div style="font-size:56px;opacity:0.15;flex-shrink:0">&#128190;</div>';
+  html += '</div></div>';
+
+  // ── Where to save it ──
+  html += '<div class="card" style="margin-bottom:20px">';
+  html += '<div class="card-title" style="margin-bottom:14px">&#128193; Where to Save Your Backup File</div>';
+  var saveOptions = [
+    ['&#9729;&#65039; iCloud Drive','Open Finder &rarr; iCloud Drive &rarr; create a folder called "Zaphire Backups" &rarr; drag the .json file in. iCloud syncs it to all your devices automatically.'],
+    ['&#128190; External Drive','Plug in a USB or external drive, open Finder, and drag the .json file to the drive. Keep one offsite copy (home or safe deposit box).'],
+    ['&#128247; Google Drive / Dropbox','Upload the .json file to any cloud storage. Rename it with the date so you can find it later, e.g. ZaphireCapital_Backup_2026-05-22.json'],
+    ['&#128274; Best Practice','Keep at least two copies in two different places. Run a backup once a month, or any time you make a lot of changes.']
+  ];
+  saveOptions.forEach(function(opt, i) {
+    var bg = i%2===0 ? 'rgba(255,255,255,0.03)' : 'transparent';
+    html += '<div style="display:flex;gap:14px;align-items:flex-start;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05)">';
+    html += '<div style="font-size:22px;flex-shrink:0;width:32px;text-align:center">'+opt[0].split(' ')[0]+'</div>';
+    html += '<div><div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:3px">'+opt[0].replace(/^[^\s]+\s/,'')+'</div>';
+    html += '<div style="font-size:12px;color:var(--muted);line-height:1.6">'+opt[1]+'</div></div></div>';
+  });
+  html += '</div>';
+
+  // ── What's inside the file ──
+  html += '<div class="card" style="margin-bottom:20px">';
+  html += '<div class="card-title" style="margin-bottom:14px">&#128196; What the Backup File Contains</div>';
+  html += '<div style="font-size:13px;color:var(--muted);line-height:1.8;margin-bottom:14px">The .json file is a complete snapshot of your entire database. It is human-readable and can be opened in any text editor. Here is what is inside:</div>';
+  var contents = [
+    ['zt_loans','Every loan record — borrower, loan amount, closing date, type, status, all compensation splits (Zaphire, Deric, Jules), expected close/fund dates, pipeline notes, tolerance, and the soft-delete timestamp for trashed loans.'],
+    ['zt_notes','All closed file notes you have written for each loan. Linked to the loan by ID.'],
+    ['zt_settings','Your custom dropdown options (loan types, statuses, MLO names) and default compensation percentages.'],
+    ['Summary header','A metadata block showing when the backup was created, how many loans/notes were exported, and which Supabase project it came from.']
+  ];
+  contents.forEach(function(c) {
+    html += '<div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start">';
+    html += '<div style="background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.25);border-radius:6px;padding:3px 10px;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:var(--gold);flex-shrink:0;white-space:nowrap">'+c[0]+'</div>';
+    html += '<div style="font-size:12px;color:var(--muted);line-height:1.6;padding-top:2px">'+c[1]+'</div></div>';
+  });
+  html += '</div>';
+
+  // ── Migration instructions ──
+  html += '<div class="card">';
+  html += '<div class="card-title" style="margin-bottom:6px">&#128260; How to Migrate to a Different Platform</div>';
+  html += '<div style="font-size:12px;color:var(--muted);margin-bottom:18px">If Supabase ever went away or you wanted to move elsewhere, here is exactly how to do it using your backup file.</div>';
+
+  var platforms = [
+    {
+      name: 'Another Supabase Project',
+      color: 'var(--teal-light)',
+      bg: 'rgba(42,157,143,0.08)',
+      border: 'rgba(42,157,143,0.25)',
+      steps: [
+        'Create a new Supabase project at supabase.com',
+        'Go to SQL Editor and run the table creation SQL (the same SQL used to set up this app — ask Claude for a copy)',
+        'In the new project, open Table Editor &rarr; zt_loans &rarr; click Insert &rarr; Import from CSV/JSON',
+        'Repeat for zt_notes and zt_settings',
+        'Update SUPA_URL and SUPA_KEY in index.html with the new project\'s values and re-upload to GitHub'
+      ]
+    },
+    {
+      name: 'PostgreSQL (self-hosted or Railway / Render)',
+      color: '#7B9FE8',
+      bg: 'rgba(123,159,232,0.08)',
+      border: 'rgba(123,159,232,0.25)',
+      steps: [
+        'Spin up a PostgreSQL instance (Railway, Render, or local Docker are all free options)',
+        'Create the same three tables using the setup SQL (ask Claude)',
+        'Use a tool like pgAdmin or TablePlus to import the JSON — or write a quick Node.js script to read the JSON and INSERT each row',
+        'Update the app\'s API calls from Supabase REST to your new endpoint (Claude can rewrite this section for you)'
+      ]
+    },
+    {
+      name: 'Firebase / Firestore',
+      color: '#FFA040',
+      bg: 'rgba(255,160,64,0.08)',
+      border: 'rgba(255,160,64,0.25)',
+      steps: [
+        'Create a Firebase project at firebase.google.com',
+        'Enable Firestore in the Firebase console',
+        'Write a short script (Claude can generate it) that reads your JSON backup and writes each loan as a Firestore document in a "loans" collection',
+        'Claude can then rewrite the app\'s API layer to use the Firebase SDK instead of Supabase REST calls'
+      ]
+    },
+    {
+      name: 'Local SQLite (fully offline, no cloud)',
+      color: '#A0D4A0',
+      bg: 'rgba(160,212,160,0.08)',
+      border: 'rgba(160,212,160,0.25)',
+      steps: [
+        'Download DB Browser for SQLite (free at sqlitebrowser.org)',
+        'Create a new database and add the three tables using the setup SQL',
+        'Use the Import JSON feature in DB Browser to load your backup data',
+        'Claude can rebuild the app to use sql.js (SQLite in the browser) instead of Supabase for a fully local version'
+      ]
+    }
+  ];
+
+  platforms.forEach(function(p) {
+    html += '<div style="background:'+p.bg+';border:1px solid '+p.border+';border-radius:10px;padding:16px;margin-bottom:14px">';
+    html += '<div style="font-size:13px;font-weight:600;color:'+p.color+';margin-bottom:10px">'+p.name+'</div>';
+    html += '<ol style="padding-left:18px;margin:0">';
+    p.steps.forEach(function(step) {
+      html += '<li style="font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:4px">'+step+'</li>';
+    });
+    html += '</ol></div>';
+  });
+
+  html += '<div style="margin-top:14px;padding:12px 16px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:12px;color:var(--muted);line-height:1.8">';
+  html += '<strong style="color:var(--white)">&#128161; Key point:</strong> Your data is yours. The JSON backup file is platform-agnostic — it is just structured text. ';
+  html += 'Any database that can store rows of data can accept it. Claude can write the migration script for whichever platform you choose. ';
+  html += 'You are never locked in to Supabase.';
+  html += '</div>';
+  html += '</div>';
+
+  return html;
 }
 
 // ── LOAN DETAIL MODAL ────────────────────────
