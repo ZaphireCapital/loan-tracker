@@ -385,7 +385,6 @@ function initApp() {
     apiGet('zt_settings', 'select=*')
   ]).then(function(results) {
     var loans = results[0];
-    // If no loans exist yet, seed with default data
     if(!loans || loans.length === 0) {
       return seedDefaultData().then(function() {
         return Promise.all([
@@ -396,7 +395,6 @@ function initApp() {
     }
     return results;
   }).then(function(results) {
-    // Separate active loans from trashed ones
     var allLoans = results[0] || [];
     state.loans = allLoans.filter(function(l){ return !l.deleted_at; });
     state.trash = allLoans.filter(function(l){ return !!l.deleted_at; });
@@ -404,19 +402,18 @@ function initApp() {
     settingsRows.forEach(function(row) {
       try { if(row.key === 'main') state.settings = JSON.parse(row.value); } catch(e) {}
     });
+    // Load notes, dates, and JDZ deals independently so one failure doesn't break everything
     return Promise.all([
-      apiGet('zt_loans', 'select=*'),
-      apiGet('zt_settings', 'select=*'),
-      apiGet('zt_notes', 'select=*'),
-      apiGet('zt_dates', 'select=*'),
-      apiGet('jdz_deals', 'select=*')
+      apiGet('zt_notes', 'select=*').catch(function(){ return []; }),
+      apiGet('zt_dates', 'select=*').catch(function(){ return []; }),
+      apiGet('jdz_deals', 'select=*').catch(function(){ return []; })
     ]);
   }).then(function(results) {
-    (results[2]||[]).forEach(function(n) { state.closedNotes[n.loan_id] = n.note; });
-    var allDates = results[3] || [];
+    (results[0]||[]).forEach(function(n) { state.closedNotes[n.loan_id] = n.note; });
+    var allDates = results[1] || [];
     state.dates = allDates.filter(function(d){ return !d.deleted_at; });
     state.datesTrash = allDates.filter(function(d){ return !!d.deleted_at; });
-    var allDeals = results[4] || [];
+    var allDeals = results[2] || [];
     state.jdzDeals = allDeals.filter(function(d){ return !d.deleted_at; });
     state.jdzTrash = allDeals.filter(function(d){ return !!d.deleted_at; });
     updateTrashBadge();
