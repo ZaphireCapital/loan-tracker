@@ -129,6 +129,20 @@ textarea{resize:vertical;min-height:80px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--navy-light);border-radius:3px;}
 ::-webkit-scrollbar-thumb:hover{background:var(--gold-dim);}
+/* ── JDZ company theme ── */
+:root{--jdz:#1D9E75;--jdz-light:#3dbdad;--jdz-dim:#0f6e56;--jdz-border:rgba(29,158,117,0.25);}
+.jdz-active{color:var(--jdz)!important;border-left-color:var(--jdz)!important;background:rgba(29,158,117,0.08)!important;}
+.jdz-label{color:var(--jdz)!important;}
+/* ── Company switcher ── */
+.co-switcher{display:flex;margin:14px 12px 6px;border:1px solid var(--border);border-radius:10px;overflow:hidden;flex-shrink:0;}
+.co-btn{flex:1;padding:7px 4px;font-size:10px;font-weight:600;text-align:center;cursor:pointer;transition:all 0.15s;letter-spacing:0.04em;border:none;background:transparent;color:var(--muted);}
+.co-btn.zc-active{background:var(--gold);color:var(--navy);}
+.co-btn.jdz-active-btn{background:var(--jdz);color:var(--white);}
+/* ── JDZ badges ── */
+.badge-jdz{background:rgba(29,158,117,0.15);color:var(--jdz);border:1px solid rgba(29,158,117,0.3);display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;}
+.badge-zc-pill{background:rgba(201,168,76,0.15);color:var(--gold);border:1px solid rgba(201,168,76,0.3);display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;}
+.badge-paid{background:rgba(45,198,83,0.15);color:var(--green);border:1px solid rgba(45,198,83,0.3);display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;}
+.badge-unpaid{background:rgba(201,168,76,0.15);color:var(--gold);border:1px solid rgba(201,168,76,0.3);display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;}
 @media print{
   #sidebar,.topbar,.topbar-actions,.btn,.modal-overlay{display:none!important;}
   body{background:white;color:black;}
@@ -154,25 +168,48 @@ textarea{resize:vertical;min-height:80px;}
 
 <div id="app" style="display:none">
   <nav id="sidebar">
-    <div class="sidebar-logo">
-      <div class="wordmark">Zaphire<br>Capital</div>
-      <div class="sub">Loan Tracker Pro</div>
+    <div class="sidebar-logo" id="sidebar-logo">
+      <div class="wordmark" id="sidebar-wordmark">Zaphire<br>Capital</div>
+      <div class="sub" id="sidebar-sub">Loan Tracker Pro</div>
     </div>
-    <div class="nav-section">
-      <div class="nav-label">Main</div>
-      <div class="nav-item" id="nav-dashboard" onclick="showPage('dashboard')"><span class="icon">📊</span> Dashboard</div>
-      <div class="nav-item" id="nav-loans" onclick="showPage('loans')"><span class="icon">🏠</span> Active Loans</div>
-      <div class="nav-item" id="nav-closed" onclick="showPage('closed')"><span class="icon">📁</span> Closed Files</div>
+    <!-- Company switcher -->
+    <div class="co-switcher">
+      <button class="co-btn zc-active" id="btn-zc" onclick="switchCompany('zc')">ZAPHIRE</button>
+      <button class="co-btn" id="btn-jdz" onclick="switchCompany('jdz')">JDZ</button>
     </div>
-    <div class="nav-section">
-      <div class="nav-label">Company</div>
-      <div class="nav-item" id="nav-dates" onclick="showPage('dates')"><span class="icon">📅</span> Important Dates <span id="dates-due-count" style="margin-left:auto;background:rgba(230,57,70,0.2);color:var(--red);border-radius:10px;padding:1px 7px;font-size:10px;display:none"></span></div>
+    <!-- ZC nav -->
+    <div id="nav-zc-section">
+      <div class="nav-section">
+        <div class="nav-label">Main</div>
+        <div class="nav-item" id="nav-dashboard" onclick="showPage('dashboard')"><span class="icon">📊</span> Dashboard</div>
+        <div class="nav-item" id="nav-loans" onclick="showPage('loans')"><span class="icon">🏠</span> Active Loans</div>
+        <div class="nav-item" id="nav-closed" onclick="showPage('closed')"><span class="icon">📁</span> Closed Files</div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Company</div>
+        <div class="nav-item" id="nav-dates" onclick="showPage('dates')"><span class="icon">📅</span> Important Dates <span id="dates-due-count" style="margin-left:auto;background:rgba(230,57,70,0.2);color:var(--red);border-radius:10px;padding:1px 7px;font-size:10px;display:none"></span></div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Tools</div>
+        <div class="nav-item" id="nav-earnings" onclick="showPage('earnings')"><span class="icon">💰</span> Earnings</div>
+        <div class="nav-item" id="nav-settings" onclick="showPage('settings')"><span class="icon">⚙️</span> Settings</div>
+        <div class="nav-item" id="nav-trash" onclick="showPage('trash')"><span class="icon">🗑️</span> Trash <span id="trash-count" style="margin-left:auto;background:rgba(230,57,70,0.2);color:var(--red);border-radius:10px;padding:1px 7px;font-size:10px;display:none"></span></div>
+      </div>
     </div>
-    <div class="nav-section">
-      <div class="nav-label">Tools</div>
-      <div class="nav-item" id="nav-earnings" onclick="showPage('earnings')"><span class="icon">💰</span> Earnings</div>
-      <div class="nav-item" id="nav-settings" onclick="showPage('settings')"><span class="icon">⚙️</span> Settings</div>
-      <div class="nav-item" id="nav-trash" onclick="showPage('trash')"><span class="icon">🗑️</span> Trash <span id="trash-count" style="margin-left:auto;background:rgba(230,57,70,0.2);color:var(--red);border-radius:10px;padding:1px 7px;font-size:10px;display:none"></span></div>
+    <!-- JDZ nav -->
+    <div id="nav-jdz-section" style="display:none">
+      <div class="nav-section">
+        <div class="nav-label jdz-label">JDZ Logistics</div>
+        <div class="nav-item" id="nav-jdz-dashboard" onclick="showPage('jdz-dashboard')"><span class="icon">📊</span> Dashboard</div>
+        <div class="nav-item" id="nav-jdz-deals" onclick="showPage('jdz-deals')"><span class="icon">💼</span> Deals</div>
+        <div class="nav-item" id="nav-jdz-history" onclick="showPage('jdz-history')"><span class="icon">📋</span> History</div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Tools</div>
+        <div class="nav-item" id="nav-jdz-earnings" onclick="showPage('earnings')"><span class="icon">💰</span> Earnings</div>
+        <div class="nav-item" id="nav-jdz-settings" onclick="showPage('jdz-settings')"><span class="icon">⚙️</span> JDZ Settings</div>
+        <div class="nav-item" id="nav-jdz-trash" onclick="showPage('jdz-trash')"><span class="icon">🗑️</span> Trash <span id="jdz-trash-count" style="margin-left:auto;background:rgba(230,57,70,0.2);color:var(--red);border-radius:10px;padding:1px 7px;font-size:10px;display:none"></span></div>
+      </div>
     </div>
     <div class="sidebar-footer">
       <div class="sync-status">
@@ -238,6 +275,8 @@ var state = {
   trash: [],
   dates: [],
   datesTrash: [],
+  jdzDeals: [],
+  jdzTrash: [],
   settings: {
     loanTypes:['Purchase','Refinance','HELOC','FHA','VA','Conventional','Jumbo'],
     loanStatuses:['Active','Pending','Closed','On Hold','Cancelled'],
@@ -247,10 +286,13 @@ var state = {
     zaphireCompPct:2.5,
     zaphireSplitPct:35,
     dericSplitPct:32.5,
-    julesSplitPct:32.5
+    julesSplitPct:32.5,
+    jdzDealTypes:['Consulting','Notary','Document Prep','Software Creation','Company Reorganization']
   },
   closedNotes: {}
 };
+
+var activeCompany = 'zc'; // 'zc' or 'jdz'
 
 var DEFAULT_LOANS = [
   {borrower:'Graham, Jasmine / Roach, Carolyn / Silick, John',loan_amount:533398,closing_date:'2026-02-06',type:'Purchase',status:'Closed',company_comp_pct:2.5,gross_earnings:13334.95,zaphire_pct:35,zaphire_cut:4667.23,deric_pct:32.5,deric_amount:4333.86,jules_pct:32.5,jules_amount:4333.86,tolerance:0,notes:'Triple borrower transaction.',loans_linked:'Graham, Jasmine',pipeline_notes:'',expected_close_date:null,expected_fund_date:null},
@@ -365,15 +407,20 @@ function initApp() {
       apiGet('zt_loans', 'select=*'),
       apiGet('zt_settings', 'select=*'),
       apiGet('zt_notes', 'select=*'),
-      apiGet('zt_dates', 'select=*')
+      apiGet('zt_dates', 'select=*'),
+      apiGet('jdz_deals', 'select=*')
     ]);
   }).then(function(results) {
     (results[2]||[]).forEach(function(n) { state.closedNotes[n.loan_id] = n.note; });
     var allDates = results[3] || [];
     state.dates = allDates.filter(function(d){ return !d.deleted_at; });
     state.datesTrash = allDates.filter(function(d){ return !!d.deleted_at; });
+    var allDeals = results[4] || [];
+    state.jdzDeals = allDeals.filter(function(d){ return !d.deleted_at; });
+    state.jdzTrash = allDeals.filter(function(d){ return !!d.deleted_at; });
     updateTrashBadge();
     updateDatesBadge();
+    updateJdzTrashBadge();
     setSyncStatus('connected', 'Synced \u2713');
     showPage('dashboard');
   }).catch(function(err) {
@@ -502,24 +549,73 @@ var currentPage = 'dashboard';
 var loanFilter = {search:'', status:'', type:''};
 var settingsTab = 'dropdowns';
 
+// ── COMPANY SWITCHER ─────────────────────────
+function switchCompany(co) {
+  activeCompany = co;
+  var zcBtn = document.getElementById('btn-zc');
+  var jdzBtn = document.getElementById('btn-jdz');
+  var zcNav = document.getElementById('nav-zc-section');
+  var jdzNav = document.getElementById('nav-jdz-section');
+  var logo = document.getElementById('sidebar-wordmark');
+  var sub = document.getElementById('sidebar-sub');
+  if(co === 'zc') {
+    zcBtn.className = 'co-btn zc-active';
+    jdzBtn.className = 'co-btn';
+    zcNav.style.display = 'block';
+    jdzNav.style.display = 'none';
+    logo.textContent = ''; logo.innerHTML = 'Zaphire<br>Capital';
+    logo.style.color = 'var(--gold)';
+    sub.textContent = 'Loan Tracker Pro';
+    showPage('dashboard');
+  } else {
+    zcBtn.className = 'co-btn';
+    jdzBtn.className = 'co-btn jdz-active-btn';
+    zcNav.style.display = 'none';
+    jdzNav.style.display = 'block';
+    logo.textContent = ''; logo.innerHTML = 'JDZaphire<br>Logistics';
+    logo.style.color = 'var(--jdz)';
+    sub.textContent = 'LLC';
+    showPage('jdz-dashboard');
+  }
+}
+
 function showPage(page) {
   currentPage = page;
-  ['dashboard','loans','closed','earnings','settings','trash','dates'].forEach(function(p) {
+  var allNavIds = ['dashboard','loans','closed','earnings','settings','trash','dates','jdz-dashboard','jdz-deals','jdz-history','jdz-settings','jdz-trash'];
+  allNavIds.forEach(function(p) {
     var el = document.getElementById('nav-' + p);
-    if(el) el.className = 'nav-item' + (p===page?' active':'');
+    if(el) el.className = 'nav-item';
   });
-  var titles = {dashboard:'Dashboard',loans:'Active Loans',closed:'Closed Files',earnings:'Earnings & Payouts',settings:'Settings',trash:'Trash',dates:'Important Dates'};
+  var activeEl = document.getElementById('nav-' + page);
+  if(activeEl) activeEl.className = page.startsWith('jdz') ? 'nav-item jdz-active' : 'nav-item active';
+  if(page==='earnings' && activeCompany==='jdz') {
+    var jdzE = document.getElementById('nav-jdz-earnings');
+    if(jdzE) jdzE.className = 'nav-item jdz-active';
+  }
+  var titles = {
+    dashboard:'Dashboard', loans:'Active Loans', closed:'Closed Files',
+    earnings:'Earnings & Payouts', settings:'Settings', trash:'Trash', dates:'Important Dates',
+    'jdz-dashboard':'JDZ Dashboard', 'jdz-deals':'Deals', 'jdz-history':'Deal History',
+    'jdz-settings':'JDZ Settings', 'jdz-trash':'JDZ Trash'
+  };
   document.getElementById('page-title').textContent = titles[page] || page;
   var acts = document.getElementById('topbar-actions');
   if(page==='dashboard'||page==='loans') {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-gold btn-sm" onclick="openAddLoan()">+ Add Loan</button>';
   } else if(page==='dates') {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-gold btn-sm" onclick="openAddDate()">+ Add Date</button>';
+  } else if(page==='jdz-deals'||page==='jdz-dashboard') {
+    acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--jdz);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddDeal()">+ Add Deal</button>';
   } else {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button>';
   }
   document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
-  var renders = {dashboard:renderDashboard, loans:renderLoans, closed:renderClosed, earnings:renderEarnings, settings:renderSettings, trash:renderTrash, dates:renderDates};
+  var renders = {
+    dashboard:renderDashboard, loans:renderLoans, closed:renderClosed,
+    earnings:renderEarnings, settings:renderSettings, trash:renderTrash, dates:renderDates,
+    'jdz-dashboard':renderJdzDashboard, 'jdz-deals':renderJdzDeals,
+    'jdz-history':renderJdzHistory, 'jdz-settings':renderJdzSettings, 'jdz-trash':renderJdzTrash
+  };
   setTimeout(function() {
     try { (renders[page]||renderDashboard)(); }
     catch(e) { document.getElementById('content').innerHTML = '<div style="padding:40px;color:var(--red)">Error: ' + e.message + '</div>'; }
@@ -772,6 +868,55 @@ function saveClosedNote(id){
 function renderEarnings(){
   var el=document.getElementById('content');
   var closed=state.loans.filter(function(l){return l.status==='Closed';});
+
+  // JDZ totals
+  var jdzDeals = (state.jdzDeals||[]);
+  var jdzPaid = jdzDeals.filter(function(d){return d.payment_status==='Paid';});
+  var jdzYtd = jdzPaid.reduce(function(s,d){return s+(+(d.amount||0));},0);
+
+  // ZC totals
+  var tG=0,tZ=0,tD=0,tJ=0;
+  closed.forEach(function(l){tG+=+(l.gross_earnings||0);tZ+=+(l.zaphire_cut||0);tD+=+(l.deric_amount||0);tJ+=+(l.jules_amount||0);});
+  var dericTotal = tD + jdzYtd; // Deric earns from both companies
+
+  // ── Combined header ──
+  var html='<div class="card" style="margin-bottom:24px;border-color:rgba(255,255,255,0.15)">';
+  html+='<div class="card-title" style="margin-bottom:16px">&#128200; Combined Income — All Companies</div>';
+  html+='<div class="stat-grid" style="margin-bottom:0">';
+  html+=statTile('','Total Deric Income','<span class="gold">'+fmtDollar(dericTotal)+'</span>','Both companies YTD');
+  html+='<div class="stat-tile teal"><div class="stat-label">Zaphire Capital</div><div class="stat-value"><span style="color:var(--gold)">'+fmtDollar(tD)+'</span></div><div class="stat-sub">Mortgage commissions</div></div>';
+  html+='<div class="stat-tile"><div class="stat-label">JDZ Logistics</div><div class="stat-value"><span style="color:var(--jdz)">'+fmtDollar(jdzYtd)+'</span></div><div class="stat-sub">'+jdzPaid.length+' paid deals</div></div>';
+  html+='</div>';
+  // Combined bar
+  var barTotal = dericTotal || 1;
+  var zcPct = Math.round(tD/barTotal*100);
+  var jdzPct = Math.round(jdzYtd/barTotal*100);
+  html+='<div style="margin-top:16px">';
+  html+='<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px"><span>Income by company</span><span>'+fmtDollar(dericTotal)+' total</span></div>';
+  html+='<div style="height:10px;border-radius:6px;overflow:hidden;display:flex">';
+  html+='<div style="width:'+zcPct+'%;background:var(--gold)" title="Zaphire: '+fmtDollar(tD)+'"></div>';
+  html+='<div style="width:'+jdzPct+'%;background:var(--jdz)" title="JDZ: '+fmtDollar(jdzYtd)+'"></div>';
+  html+='</div>';
+  html+='<div style="display:flex;gap:16px;margin-top:6px;font-size:11px">';
+  html+='<span style="color:var(--gold)">&#9632; Zaphire Capital '+zcPct+'%</span>';
+  html+='<span style="color:var(--jdz)">&#9632; JDZ Logistics '+jdzPct+'%</span>';
+  html+='</div></div></div>';
+  html+='<hr class="section-divider" style="margin:20px 0">';
+
+  // ── JDZ quick breakdown ──
+  if(jdzPaid.length){
+    html+='<div class="card" style="margin-bottom:20px;border-color:var(--jdz-border)">';
+    html+='<div class="card-title" style="color:var(--jdz);margin-bottom:14px">JDZaphire Logistics LLC — Earnings</div>';
+    html+='<div class="table-wrap"><table><thead><tr><th>Client</th><th>Type</th><th>Date</th><th>Amount</th></tr></thead><tbody>';
+    jdzPaid.forEach(function(d){
+      html+='<tr><td>'+esc(d.client_name)+'</td><td>'+esc(d.deal_type)+'</td><td>'+fmtDate(d.deal_date)+'</td><td class="mono" style="color:var(--jdz)">'+fmtDollar(d.amount)+'</td></tr>';
+    });
+    html+='<tr style="border-top:2px solid var(--border);font-weight:600"><td colspan="3">JDZ Total</td><td class="mono" style="color:var(--jdz)">'+fmtDollar(jdzYtd)+'</td></tr>';
+    html+='</tbody></table></div></div>';
+  }
+
+  html+='<div style="font-family:\'DM Serif Display\',serif;font-size:17px;color:var(--gold-light);margin-bottom:16px">Zaphire Capital — Detail</div>';
+
   var mNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var mData=[];
   for(var i=0;i<12;i++) mData.push({loans:[],gross:0,z:0,d:0,j:0});
@@ -1789,7 +1934,355 @@ function emptyDatesTrash() {
 function openModal(html){document.getElementById('modal-content').innerHTML=html;document.getElementById('modal-overlay').style.display='flex';}
 function closeModal(){document.getElementById('modal-overlay').style.display='none';}
 
-// ── PASSWORD GATE ─────────────────────────────
+// ── JDZ LOGISTICS ────────────────────────────
+
+function updateJdzTrashBadge() {
+  var el = document.getElementById('jdz-trash-count');
+  if(!el) return;
+  var n = (state.jdzTrash||[]).length;
+  if(n>0){el.textContent=n;el.style.display='inline';}
+  else{el.style.display='none';}
+}
+
+function renderJdzDashboard() {
+  var el = document.getElementById('content');
+  var deals = state.jdzDeals||[];
+  var paid = deals.filter(function(d){return d.payment_status==='Paid';});
+  var pending = deals.filter(function(d){return d.payment_status!=='Paid';});
+  var now = new Date(); var curYear = now.getFullYear(); var curMonth = now.getMonth();
+
+  var ytd=0, thisMonth=0;
+  paid.forEach(function(d){
+    var amt = +(d.amount||0);
+    ytd += amt;
+    if(d.deal_date) {
+      var dt = new Date(d.deal_date+'T12:00:00');
+      if(dt.getFullYear()===curYear && dt.getMonth()===curMonth) thisMonth+=amt;
+    }
+  });
+  var pendingAmt = pending.reduce(function(s,d){return s+(+(d.amount||0));},0);
+
+  // By type
+  var byType = {};
+  deals.forEach(function(d){
+    var t = d.deal_type||'Other';
+    if(!byType[t]) byType[t]=0;
+    byType[t]+=(+(d.amount||0));
+  });
+
+  var recent = deals.slice().sort(function(a,b){return (b.deal_date||'')>(a.deal_date||'')?1:-1;}).slice(0,5);
+
+  var html = '<div class="stat-grid">';
+  html += statTile('teal','YTD Earned','<span style="color:var(--jdz)">'+fmtDollar(ytd)+'</span>',paid.length+' paid deals');
+  html += statTile('','This Month',fmtDollar(thisMonth),'Paid deals');
+  html += statTile('','Pending',fmtDollar(pendingAmt),pending.length+' unpaid deal'+(pending.length!==1?'s':''));
+  html += statTile('','Total Deals',deals.length,'All time');
+  html += '</div>';
+
+  // By type breakdown
+  html += '<div class="dash-grid" style="margin-bottom:20px">';
+  html += '<div class="card"><div class="card-header"><div><div class="card-title" style="color:var(--jdz)">Earnings by Deal Type</div></div></div>';
+  html += '<div class="table-wrap"><table><thead><tr><th>Type</th><th>Total</th><th>Count</th></tr></thead><tbody>';
+  Object.keys(byType).forEach(function(t){
+    var count = deals.filter(function(d){return (d.deal_type||'Other')===t;}).length;
+    html += '<tr><td>'+esc(t)+'</td><td class="mono" style="color:var(--jdz)">'+fmtDollar(byType[t])+'</td><td>'+count+'</td></tr>';
+  });
+  html += '</tbody></table></div></div>';
+
+  html += '<div class="card"><div class="card-title" style="margin-bottom:16px;color:var(--jdz)">Quick Stats</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:10px;font-size:13px">';
+  html += '<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Avg deal value</span><span class="mono">'+fmtDollar(deals.length?deals.reduce(function(s,d){return s+(+(d.amount||0));},0)/deals.length:0)+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Largest deal</span><span class="mono">'+fmtDollar(deals.length?Math.max.apply(null,deals.map(function(d){return +(d.amount||0);})):0)+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Unpaid deals</span><span class="mono" style="color:var(--gold)">'+pending.length+'</span></div>';
+  html += '</div></div></div>';
+
+  html += '<div class="gap"></div><div class="card"><div class="card-header"><div><div class="card-title" style="color:var(--jdz)">Recent Deals</div></div><button class="btn btn-ghost btn-sm" onclick="showPage(\'jdz-deals\')">View All &rarr;</button></div>';
+  html += '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Type</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead><tbody>';
+  if(recent.length){
+    recent.forEach(function(d){
+      html += '<tr onclick="openEditDeal('+d.id+')">';
+      html += '<td><strong>'+esc(d.client_name)+'</strong></td>';
+      html += '<td>'+esc(d.deal_type)+'</td>';
+      html += '<td>'+fmtDate(d.deal_date)+'</td>';
+      html += '<td class="mono" style="color:var(--jdz)">'+fmtDollar(d.amount)+'</td>';
+      html += '<td><span class="'+(d.payment_status==='Paid'?'badge-paid':'badge-unpaid')+'">'+esc(d.payment_status||'Pending')+'</span></td>';
+      html += '</tr>';
+    });
+  } else {
+    html += '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:30px">No deals yet. Click + Add Deal to get started.</td></tr>';
+  }
+  html += '</tbody></table></div></div>';
+  el.innerHTML = html;
+}
+
+function renderJdzDeals() {
+  var el = document.getElementById('content');
+  var deals = (state.jdzDeals||[]).filter(function(d){return d.payment_status!=='Paid';}).slice().sort(function(a,b){return (b.deal_date||'')>(a.deal_date||'')?1:-1;});
+  var all = (state.jdzDeals||[]).slice().sort(function(a,b){return (b.deal_date||'')>(a.deal_date||'')?1:-1;});
+
+  var html = '';
+  // Unpaid / outstanding
+  if(deals.length){
+    html += '<div class="card" style="margin-bottom:20px;border-color:var(--jdz-border)">';
+    html += '<div class="card-header"><div><div class="card-title" style="color:var(--jdz)">Outstanding — Awaiting Payment</div><div class="card-sub">'+deals.length+' unpaid deal'+(deals.length!==1?'s':'')+'</div></div></div>';
+    deals.forEach(function(d){ html += dealRow(d, true); });
+    html += '</div>';
+  }
+
+  html += '<div class="card"><div class="card-header"><div><div class="card-title">All Deals</div><div class="card-sub">'+all.length+' total</div></div></div>';
+  if(all.length){
+    html += '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Type</th><th>Billing</th><th>Date</th><th>Amount</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>';
+    all.forEach(function(d){
+      html += '<tr>';
+      html += '<td onclick="openEditDeal('+d.id+')" style="cursor:pointer"><strong>'+esc(d.client_name)+'</strong></td>';
+      html += '<td>'+esc(d.deal_type)+'</td>';
+      html += '<td style="font-size:11px;color:var(--muted)">';
+      if(d.billing_type==='hourly'&&d.hours) html += d.hours+'h @ $'+parseFloat(d.rate||0).toFixed(0)+'/hr';
+      else html += 'Flat fee';
+      html += '</td>';
+      html += '<td>'+fmtDate(d.deal_date)+'</td>';
+      html += '<td class="mono" style="color:var(--jdz)">'+fmtDollar(d.amount)+'</td>';
+      html += '<td><span class="'+(d.payment_status==='Paid'?'badge-paid':'badge-unpaid')+'">'+esc(d.payment_status||'Pending')+'</span></td>';
+      html += '<td style="font-size:11px;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(d.notes||'')+'</td>';
+      html += '<td><button class="btn btn-ghost btn-sm" onclick="openEditDeal('+d.id+')">Edit</button> <button class="btn btn-danger btn-sm" onclick="softDeleteDeal('+d.id+')">Del</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  } else {
+    html += '<div style="text-align:center;padding:60px;color:var(--muted)">No deals yet. Click + Add Deal.</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function dealRow(d, showMarkPaid) {
+  var html = '<div style="border:1px solid var(--jdz-border);border-radius:8px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px">';
+  html += '<div style="flex:1"><div style="font-weight:600;font-size:13px;color:var(--white);margin-bottom:3px">'+esc(d.client_name)+'</div>';
+  html += '<div style="font-size:11px;color:var(--muted)">'+esc(d.deal_type)+' &middot; '+fmtDate(d.deal_date);
+  if(d.billing_type==='hourly'&&d.hours) html += ' &middot; '+d.hours+'h @ $'+parseFloat(d.rate||0).toFixed(0)+'/hr';
+  if(d.notes) html += ' &middot; '+esc(d.notes.slice(0,60));
+  html += '</div></div>';
+  html += '<div style="text-align:right;flex-shrink:0"><div class="mono" style="font-size:16px;color:var(--jdz);font-weight:500">'+fmtDollar(d.amount)+'</div></div>';
+  html += '<div style="display:flex;gap:6px;flex-shrink:0">';
+  if(showMarkPaid) html += '<button class="btn btn-teal btn-sm" onclick="markDealPaid('+d.id+')">&#10003; Paid</button>';
+  html += '<button class="btn btn-ghost btn-sm" onclick="openEditDeal('+d.id+')">Edit</button></div></div>';
+  return html;
+}
+
+function renderJdzHistory() {
+  var el = document.getElementById('content');
+  var paid = (state.jdzDeals||[]).filter(function(d){return d.payment_status==='Paid';}).slice().sort(function(a,b){return (b.deal_date||'')>(a.deal_date||'')?1:-1;});
+
+  var mNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var mData=[]; for(var i=0;i<12;i++) mData.push({deals:[],total:0});
+  paid.forEach(function(d){
+    if(d.deal_date){var m=new Date(d.deal_date+'T12:00:00').getMonth();mData[m].deals.push(d);mData[m].total+=+(d.amount||0);}
+  });
+  var total = paid.reduce(function(s,d){return s+(+(d.amount||0));},0);
+
+  var html = '<div class="stat-grid" style="margin-bottom:24px">';
+  html += statTile('teal','Total Paid Out','<span style="color:var(--jdz)">'+fmtDollar(total)+'</span>',paid.length+' deals');
+  html += '</div>';
+
+  mNames.forEach(function(m,i){
+    if(!mData[i].deals.length) return;
+    html += '<div class="card" style="margin-bottom:14px">';
+    html += '<div class="card-header"><div><div class="card-title">'+m+'</div><div class="card-sub">'+mData[i].deals.length+' deal'+(mData[i].deals.length!==1?'s':'')+' &middot; '+fmtDollar(mData[i].total)+'</div></div></div>';
+    html += '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Type</th><th>Date</th><th>Amount</th></tr></thead><tbody>';
+    mData[i].deals.forEach(function(d){
+      html += '<tr onclick="openEditDeal('+d.id+')">';
+      html += '<td>'+esc(d.client_name)+'</td><td>'+esc(d.deal_type)+'</td>';
+      html += '<td>'+fmtDate(d.deal_date)+'</td>';
+      html += '<td class="mono" style="color:var(--jdz)">'+fmtDollar(d.amount)+'</td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  });
+  if(!paid.length) html += '<div style="text-align:center;padding:60px;color:var(--muted)">No paid deals yet.</div>';
+  el.innerHTML = html;
+}
+
+function renderJdzSettings() {
+  var el = document.getElementById('content');
+  var types = state.settings.jdzDealTypes || [];
+  var html = '<div class="card" style="margin-bottom:16px">';
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--jdz)">Deal Types</div><div class="card-sub">'+types.length+' types</div></div></div>';
+  html += '<div class="tag-list">';
+  types.forEach(function(t,i){
+    html += '<span class="tag" style="border-color:var(--jdz-border);color:var(--jdz-light)">'+esc(t)+'<span class="tag-del" onclick="removeJdzType('+i+')">&#215;</span></span>';
+  });
+  html += '</div><div class="tag-add-row">';
+  html += '<input type="text" id="jdz-type-input" placeholder="Add deal type..." style="max-width:240px">';
+  html += '<button class="btn btn-sm" style="background:var(--jdz);color:white;border:none" onclick="addJdzType()">Add</button></div></div>';
+  el.innerHTML = html;
+}
+
+function addJdzType(){
+  var inp=document.getElementById('jdz-type-input');
+  var val=inp.value.trim(); if(!val) return;
+  if(!state.settings.jdzDealTypes) state.settings.jdzDealTypes=[];
+  if(state.settings.jdzDealTypes.indexOf(val)<0) state.settings.jdzDealTypes.push(val);
+  inp.value=''; saveSettings(); renderJdzSettings();
+}
+function removeJdzType(idx){
+  state.settings.jdzDealTypes.splice(idx,1); saveSettings(); renderJdzSettings();
+}
+
+function renderJdzTrash() {
+  var el = document.getElementById('content');
+  var items = (state.jdzTrash||[]).slice().sort(function(a,b){return (b.deleted_at||'')>(a.deleted_at||'')?1:-1;});
+  var html = '<div class="card">';
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--red)">&#128465; JDZ Trash</div><div class="card-sub">Permanently deleted after 30 days</div></div>';
+  if(items.length) html += '<button class="btn btn-danger btn-sm" onclick="emptyJdzTrash()">Empty</button>';
+  html += '</div>';
+  if(!items.length){
+    html += '<div style="text-align:center;padding:60px;color:var(--muted)">JDZ trash is empty.</div>';
+  } else {
+    items.forEach(function(d){
+      var daysLeft = Math.ceil((new Date(new Date(d.deleted_at).getTime()+30*86400000)-new Date())/86400000);
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.04)">';
+      html += '<div><div style="font-size:13px;color:var(--muted);text-decoration:line-through">'+esc(d.client_name)+' — '+esc(d.deal_type)+'</div>';
+      html += '<div style="font-size:11px;color:var(--red);margin-top:2px">Deletes in '+daysLeft+' day'+(daysLeft!==1?'s':'')+'</div></div>';
+      html += '<div style="display:flex;gap:8px;align-items:center"><div class="mono" style="color:var(--muted)">'+fmtDollar(d.amount)+'</div>';
+      html += '<button class="btn btn-teal btn-sm" onclick="restoreDeal('+d.id+')">&#8617; Restore</button></div></div>';
+    });
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ── DEAL FORM ────────────────────────────────
+function openAddDeal(){showDealForm(null);}
+function openEditDeal(id){showDealForm(id);}
+
+function showDealForm(id){
+  var d = id ? (state.jdzDeals||[]).find(function(x){return x.id===id;}) : null;
+  function v(f,def){if(def===undefined)def='';return d?(d[f]!==undefined&&d[f]!==null?d[f]:def):def;}
+  var types = state.settings.jdzDealTypes || ['Consulting','Notary','Document Prep','Software Creation','Company Reorganization'];
+
+  var html = '<div class="modal-title" style="color:var(--jdz)">'+(d?'Edit Deal':'Add New Deal')+'</div>';
+  html += '<div class="modal-sub">JDZaphire Logistics LLC</div>';
+  html += '<div class="form-grid">';
+  html += '<div class="form-group full"><label>Client Name / Company</label><input type="text" id="fd-client" value="'+esc(v('client_name'))+'" placeholder="e.g. Johnson, Robert or Apex LLC"></div>';
+  html += '<div class="form-group"><label>Deal Type</label><select id="fd-type"><option value="">Select type...</option>';
+  types.forEach(function(t){html+='<option value="'+esc(t)+'"'+(v('deal_type')===t?' selected':'')+'>'+esc(t)+'</option>';});
+  html += '</select></div>';
+  html += '<div class="form-group"><label>Deal Date</label><input type="date" id="fd-date" value="'+v('deal_date')+'"></div>';
+  html += '</div>';
+
+  html += '<hr class="section-divider"><div class="section-label">Billing</div>';
+  html += '<div class="form-grid cols3">';
+  html += '<div class="form-group"><label>Billing Type</label><select id="fd-billing" onchange="toggleHourly()">';
+  html += '<option value="flat"'+(v('billing_type','flat')==='flat'?' selected':'')+'>Flat Fee</option>';
+  html += '<option value="hourly"'+(v('billing_type')==='hourly'?' selected':'')+'>Hourly</option>';
+  html += '</select></div>';
+  html += '<div class="form-group" id="fd-hours-group" style="'+(v('billing_type')==='hourly'?'':'display:none')+'"><label>Hours</label><input type="number" id="fd-hours" step="0.25" value="'+v('hours','')+'" oninput="calcHourly()"></div>';
+  html += '<div class="form-group" id="fd-rate-group" style="'+(v('billing_type')==='hourly'?'':'display:none')+'"><label>Rate ($/hr)</label><div class="input-prefix"><span>$</span><input type="number" id="fd-rate" step="1" value="'+v('rate','')+'" oninput="calcHourly()"></div></div>';
+  html += '</div>';
+  html += '<div class="form-grid" style="margin-top:12px">';
+  html += '<div class="form-group"><label>Total Amount ($)</label><div class="input-prefix"><span>$</span><input type="number" id="fd-amount" step="0.01" value="'+v('amount','')+'" placeholder="0.00"></div></div>';
+  html += '<div class="form-group"><label>Payment Status</label><select id="fd-status">';
+  html += '<option value="Pending"'+(v('payment_status','Pending')==='Pending'?' selected':'')+'>Pending</option>';
+  html += '<option value="Paid"'+(v('payment_status')==='Paid'?' selected':'')+'>Paid</option>';
+  html += '<option value="Invoiced"'+(v('payment_status')==='Invoiced'?' selected':'')+'>Invoiced</option>';
+  html += '</select></div>';
+  html += '<div class="form-group"><label>Payment Date</label><input type="date" id="fd-paid-date" value="'+v('paid_date')+'"></div>';
+  html += '</div>';
+
+  html += '<hr class="section-divider">';
+  html += '<div class="form-grid"><div class="form-group full"><label>Notes</label><textarea id="fd-notes" rows="3" placeholder="Any notes about this deal...">'+esc(v('notes'))+'</textarea></div></div>';
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button>';
+  html += '<button class="btn btn-sm" style="background:var(--jdz);color:white;border:none;padding:7px 20px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="saveDeal('+(id||'null')+')">'+( d?'Save Changes':'Add Deal')+'</button></div>';
+  openModal(html);
+}
+
+function toggleHourly(){
+  var isHourly = document.getElementById('fd-billing').value === 'hourly';
+  document.getElementById('fd-hours-group').style.display = isHourly ? '' : 'none';
+  document.getElementById('fd-rate-group').style.display = isHourly ? '' : 'none';
+}
+
+function calcHourly(){
+  var h = parseFloat(document.getElementById('fd-hours').value)||0;
+  var r = parseFloat(document.getElementById('fd-rate').value)||0;
+  if(h && r) document.getElementById('fd-amount').value = (h*r).toFixed(2);
+}
+
+function saveDeal(id){
+  var client = document.getElementById('fd-client').value.trim();
+  if(!client){alert('Client name is required.');return;}
+  function dateOrNull(fid){var v=document.getElementById(fid).value;return v||null;}
+  var data = {
+    client_name: client,
+    deal_type: document.getElementById('fd-type').value,
+    deal_date: dateOrNull('fd-date'),
+    billing_type: document.getElementById('fd-billing').value,
+    hours: parseFloat(document.getElementById('fd-hours').value)||null,
+    rate: parseFloat(document.getElementById('fd-rate').value)||null,
+    amount: parseFloat(document.getElementById('fd-amount').value)||0,
+    payment_status: document.getElementById('fd-status').value,
+    paid_date: dateOrNull('fd-paid-date'),
+    notes: document.getElementById('fd-notes').value.trim()
+  };
+  setSyncStatus('saving','Saving...');
+  var promise = id ? apiPatch('jdz_deals',id,data) : apiPost('jdz_deals',[data]);
+  promise.then(function(result){
+    var saved = Array.isArray(result)?result[0]:result;
+    if(id){
+      var idx=(state.jdzDeals||[]).findIndex(function(x){return x.id===id;});
+      if(idx>=0) state.jdzDeals[idx]=saved;
+    } else {
+      if(!state.jdzDeals) state.jdzDeals=[];
+      state.jdzDeals.push(saved);
+    }
+    setSyncStatus('saved','Saved \u2713');
+    closeModal(); showPage(currentPage);
+  }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
+}
+
+function markDealPaid(id){
+  var today = new Date().toISOString().slice(0,10);
+  apiPatch('jdz_deals',id,{payment_status:'Paid',paid_date:today}).then(function(result){
+    var saved=Array.isArray(result)?result[0]:result;
+    var idx=(state.jdzDeals||[]).findIndex(function(x){return x.id===id;});
+    if(idx>=0) state.jdzDeals[idx]=saved;
+    setSyncStatus('saved','Saved \u2713'); showPage(currentPage);
+  }).catch(function(e){alert('Error: '+e.message);});
+}
+
+function softDeleteDeal(id){
+  if(!confirm('Move this deal to trash?')) return;
+  var now=new Date().toISOString();
+  apiPatch('jdz_deals',id,{deleted_at:now}).then(function(result){
+    var saved=Array.isArray(result)?result[0]:result;
+    state.jdzDeals=(state.jdzDeals||[]).filter(function(x){return x.id!==id;});
+    if(!state.jdzTrash) state.jdzTrash=[];
+    state.jdzTrash.push(saved);
+    updateJdzTrashBadge(); setSyncStatus('saved','Moved to trash \u2713'); showPage(currentPage);
+  }).catch(function(e){alert('Error: '+e.message);});
+}
+
+function restoreDeal(id){
+  apiPatch('jdz_deals',id,{deleted_at:null}).then(function(result){
+    var saved=Array.isArray(result)?result[0]:result;
+    state.jdzTrash=(state.jdzTrash||[]).filter(function(x){return x.id!==id;});
+    saved.deleted_at=null;
+    if(!state.jdzDeals) state.jdzDeals=[];
+    state.jdzDeals.push(saved);
+    updateJdzTrashBadge(); setSyncStatus('saved','Restored \u2713'); renderJdzTrash();
+  }).catch(function(e){alert('Error: '+e.message);});
+}
+
+function emptyJdzTrash(){
+  if(!confirm('Permanently delete all items in JDZ trash?')) return;
+  var ids=(state.jdzTrash||[]).map(function(d){return d.id;});
+  Promise.all(ids.map(function(id){return apiDelete('jdz_deals',id);})).then(function(){
+    state.jdzTrash=[]; updateJdzTrashBadge(); renderJdzTrash();
+    setSyncStatus('saved','Trash emptied \u2713');
+  }).catch(function(e){alert('Error: '+e.message);});
+}
+
+// ── UPDATE EARNINGS PAGE TO INCLUDE JDZ ──────
+// (earnings page already calls renderEarnings — patch it to show combined view)
 // Change this to whatever password you want
 var APP_PASSWORD = 'Zaphire8558!';
 
