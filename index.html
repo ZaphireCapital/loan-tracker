@@ -2285,6 +2285,7 @@ function saveNewClient() {
 }
 
 
+function toggleHourly(){
   var isHourly = document.getElementById('fd-billing').value === 'hourly';
   document.getElementById('fd-hours-group').style.display = isHourly ? '' : 'none';
   document.getElementById('fd-rate-group').style.display = isHourly ? '' : 'none';
