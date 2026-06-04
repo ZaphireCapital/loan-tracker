@@ -423,11 +423,21 @@ function initApp() {
     showPage('dashboard');
   }).catch(function(err) {
     setSyncStatus('error', 'Connection error');
-    if(err.message && err.message.indexOf('42P01') > -1) {
-      document.getElementById('content').innerHTML = needsSetupHtml();
-    } else {
-      document.getElementById('content').innerHTML = '<div style="padding:40px;color:var(--red);line-height:2"><strong>Connection error:</strong><br>' + err.message + '</div>';
-    }
+    var msg = err ? (err.message || String(err)) : 'Unknown error';
+    document.getElementById('content').innerHTML = 
+      '<div style="padding:40px;max-width:600px">'
+      + '<div style="background:rgba(230,57,70,0.1);border:1px solid rgba(230,57,70,0.4);border-radius:12px;padding:24px">'
+      + '<div style="font-size:16px;font-weight:600;color:var(--red);margin-bottom:12px">&#9888; Connection Error</div>'
+      + '<div style="font-size:13px;color:var(--muted);line-height:1.8;margin-bottom:16px">' + msg + '</div>'
+      + '<div style="font-size:12px;color:var(--muted);line-height:1.8">'
+      + '<strong style="color:var(--white)">Things to check:</strong><br>'
+      + '1. Supabase project is active (not paused) — check supabase.com<br>'
+      + '2. All four tables exist: zt_loans, zt_settings, zt_notes, zt_dates, jdz_deals<br>'
+      + '3. Row Level Security policies are set to allow all<br>'
+      + '4. The anon key in the file matches your Supabase project'
+      + '</div>'
+      + '<button class="btn btn-gold" style="margin-top:16px" onclick="initApp()">&#8635; Retry</button>'
+      + '</div></div>';
   });
 }
 
@@ -2381,34 +2391,42 @@ function checkPassword() {
   var input = document.getElementById('lock-input');
   var err = document.getElementById('lock-err');
   if(input.value === APP_PASSWORD) {
-    // Store session so refreshing doesn't re-prompt (expires when tab closes)
     try { sessionStorage.setItem('zc_auth', '1'); } catch(e) {}
     document.getElementById('lock-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
-    initApp();
+    // Show loading state immediately so screen isn't blank
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div> Connecting to database...</div>';
+    try {
+      initApp();
+    } catch(e) {
+      document.getElementById('lock-screen').style.display = 'flex';
+      document.getElementById('app').style.display = 'none';
+      err.style.color = 'var(--red)';
+      err.textContent = 'Startup error: ' + e.message;
+    }
   } else {
     err.textContent = 'Incorrect password. Please try again.';
     input.value = '';
     input.focus();
-    // Shake animation
     input.style.borderColor = 'var(--red)';
     setTimeout(function(){ input.style.borderColor = ''; }, 1500);
   }
 }
 
 // ── START ────────────────────────────────────
-// Check if already authenticated this session
 try {
   if(sessionStorage.getItem('zc_auth') === '1') {
     document.getElementById('lock-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div> Connecting to database...</div>';
     initApp();
   } else {
-    // Focus password field
     setTimeout(function(){ var el=document.getElementById('lock-input'); if(el) el.focus(); }, 100);
   }
 } catch(e) {
-  // sessionStorage blocked — just show lock screen
+  // Show error on lock screen
+  var errEl = document.getElementById('lock-err');
+  if(errEl) { errEl.style.color='var(--red)'; errEl.textContent = 'Startup error: ' + e.message; }
   setTimeout(function(){ var el=document.getElementById('lock-input'); if(el) el.focus(); }, 100);
 }
 </script>
