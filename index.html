@@ -287,7 +287,8 @@ var state = {
     zaphireSplitPct:35,
     dericSplitPct:32.5,
     julesSplitPct:32.5,
-    jdzDealTypes:['Consulting','Notary','Document Prep','Software Creation','Company Reorganization']
+    jdzDealTypes:['Consulting','Notary','Document Prep','Software Creation','Company Reorganization'],
+    jdzClients:[]
   },
   closedNotes: {}
 };
@@ -1997,19 +1998,20 @@ function renderJdzDashboard() {
   html += '</div></div></div>';
 
   html += '<div class="gap"></div><div class="card"><div class="card-header"><div><div class="card-title" style="color:var(--jdz)">Recent Deals</div></div><button class="btn btn-ghost btn-sm" onclick="showPage(\'jdz-deals\')">View All &rarr;</button></div>';
-  html += '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Type</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead><tbody>';
+  html += '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Type</th><th>Date</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>';
   if(recent.length){
     recent.forEach(function(d){
-      html += '<tr onclick="openEditDeal('+d.id+')">';
-      html += '<td><strong>'+esc(d.client_name)+'</strong></td>';
+      html += '<tr>';
+      html += '<td onclick="openEditDeal('+d.id+')" style="cursor:pointer"><strong>'+esc(d.client_name)+'</strong></td>';
       html += '<td>'+esc(d.deal_type)+'</td>';
       html += '<td>'+fmtDate(d.deal_date)+'</td>';
       html += '<td class="mono" style="color:var(--jdz)">'+fmtDollar(d.amount)+'</td>';
       html += '<td><span class="'+(d.payment_status==='Paid'?'badge-paid':'badge-unpaid')+'">'+esc(d.payment_status||'Pending')+'</span></td>';
+      html += '<td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditDeal('+d.id+')">Edit</button> <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();softDeleteDeal('+d.id+')">Del</button></td>';
       html += '</tr>';
     });
   } else {
-    html += '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:30px">No deals yet. Click + Add Deal to get started.</td></tr>';
+    html += '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px">No deals yet. Click + Add Deal to get started.</td></tr>';
   }
   html += '</tbody></table></div></div>';
   el.innerHTML = html;
@@ -2104,7 +2106,20 @@ function renderJdzHistory() {
 function renderJdzSettings() {
   var el = document.getElementById('content');
   var types = state.settings.jdzDealTypes || [];
+  var clients = state.settings.jdzClients || [];
+
   var html = '<div class="card" style="margin-bottom:16px">';
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--jdz)">Clients</div><div class="card-sub">'+clients.length+' client'+(clients.length!==1?'s:':':\xa0')+'</div></div></div>';
+  html += '<div class="tag-list">';
+  clients.forEach(function(c,i){
+    html += '<span class="tag" style="border-color:var(--jdz-border);color:var(--jdz-light)">'+esc(c)+'<span class="tag-del" onclick="removeJdzClient('+i+')">&#215;</span></span>';
+  });
+  if(!clients.length) html += '<span style="font-size:12px;color:var(--muted)">No clients yet — they\'re saved automatically when you add a deal.</span>';
+  html += '</div><div class="tag-add-row">';
+  html += '<input type="text" id="jdz-client-input" placeholder="Add client manually..." style="max-width:280px">';
+  html += '<button class="btn btn-sm" style="background:var(--jdz);color:white;border:none" onclick="addJdzClient()">Add</button></div></div>';
+
+  html += '<div class="card" style="margin-bottom:16px">';
   html += '<div class="card-header"><div><div class="card-title" style="color:var(--jdz)">Deal Types</div><div class="card-sub">'+types.length+' types</div></div></div>';
   html += '<div class="tag-list">';
   types.forEach(function(t,i){
@@ -2116,6 +2131,16 @@ function renderJdzSettings() {
   el.innerHTML = html;
 }
 
+function addJdzClient(){
+  var inp=document.getElementById('jdz-client-input');
+  var val=inp.value.trim(); if(!val) return;
+  if(!state.settings.jdzClients) state.settings.jdzClients=[];
+  if(state.settings.jdzClients.indexOf(val)<0) state.settings.jdzClients.push(val);
+  inp.value=''; saveSettings(); renderJdzSettings();
+}
+function removeJdzClient(idx){
+  state.settings.jdzClients.splice(idx,1); saveSettings(); renderJdzSettings();
+}
 function addJdzType(){
   var inp=document.getElementById('jdz-type-input');
   var val=inp.value.trim(); if(!val) return;
@@ -2159,10 +2184,23 @@ function showDealForm(id){
   function v(f,def){if(def===undefined)def='';return d?(d[f]!==undefined&&d[f]!==null?d[f]:def):def;}
   var types = state.settings.jdzDealTypes || ['Consulting','Notary','Document Prep','Software Creation','Company Reorganization'];
 
+  var clients = state.settings.jdzClients || [];
+  var clientOptions = clients.map(function(c){
+    return '<option value="'+esc(c)+'"'+(v('client_name')===c?' selected':'')+'>'+esc(c)+'</option>';
+  }).join('');
+
   var html = '<div class="modal-title" style="color:var(--jdz)">'+(d?'Edit Deal':'Add New Deal')+'</div>';
   html += '<div class="modal-sub">JDZaphire Logistics LLC</div>';
   html += '<div class="form-grid">';
-  html += '<div class="form-group full"><label>Client Name / Company</label><input type="text" id="fd-client" value="'+esc(v('client_name'))+'" placeholder="e.g. Johnson, Robert or Apex LLC"></div>';
+  html += '<div class="form-group full"><label>Client</label>';
+  html += '<div style="display:flex;gap:8px">';
+  html += '<select id="fd-client-select" onchange="clientSelectChanged()" style="flex:1"><option value="">-- Select existing client --</option>'+clientOptions+'<option value="__new__">+ Add new client...</option></select>';
+  html += '</div>';
+  html += '<div id="fd-client-new-row" style="display:'+(clients.length===0||!v('client_name')?'flex':'none')+';gap:8px;margin-top:8px;align-items:center">';
+  html += '<input type="text" id="fd-client-new" placeholder="Type new client name..." style="flex:1" value="'+(clients.indexOf(v('client_name'))<0?esc(v('client_name')):'')+'"><button class="btn btn-sm btn-outline" onclick="saveNewClient()" style="flex-shrink:0;white-space:nowrap">Save Client</button>';
+  html += '</div>';
+  html += '<input type="hidden" id="fd-client" value="'+esc(v('client_name'))+'">';
+  html += '</div>';
   html += '<div class="form-group"><label>Deal Type</label><select id="fd-type"><option value="">Select type...</option>';
   types.forEach(function(t){html+='<option value="'+esc(t)+'"'+(v('deal_type')===t?' selected':'')+'>'+esc(t)+'</option>';});
   html += '</select></div>';
@@ -2195,7 +2233,51 @@ function showDealForm(id){
   openModal(html);
 }
 
-function toggleHourly(){
+function clientSelectChanged() {
+  var sel = document.getElementById('fd-client-select');
+  var newRow = document.getElementById('fd-client-new-row');
+  var hidden = document.getElementById('fd-client');
+  if(sel.value === '__new__') {
+    newRow.style.display = 'flex';
+    document.getElementById('fd-client-new').focus();
+    if(hidden) hidden.value = '';
+  } else if(sel.value) {
+    newRow.style.display = 'none';
+    if(hidden) hidden.value = sel.value;
+  } else {
+    newRow.style.display = 'none';
+    if(hidden) hidden.value = '';
+  }
+}
+
+function saveNewClient() {
+  var inp = document.getElementById('fd-client-new');
+  var val = inp.value.trim();
+  if(!val) { alert('Please enter a client name.'); return; }
+  if(!state.settings.jdzClients) state.settings.jdzClients = [];
+  if(state.settings.jdzClients.indexOf(val) < 0) {
+    state.settings.jdzClients.push(val);
+    saveSettings();
+  }
+  // Update the hidden field and select
+  var hidden = document.getElementById('fd-client');
+  if(hidden) hidden.value = val;
+  var sel = document.getElementById('fd-client-select');
+  if(sel) {
+    // Add option if not already there
+    var exists = false;
+    for(var i=0;i<sel.options.length;i++) { if(sel.options[i].value===val){exists=true;sel.selectedIndex=i;break;} }
+    if(!exists) {
+      var opt = document.createElement('option');
+      opt.value = val; opt.text = val; opt.selected = true;
+      sel.insertBefore(opt, sel.options[sel.options.length-1]); // before "+ Add new"
+    }
+  }
+  var newRow = document.getElementById('fd-client-new-row');
+  if(newRow) newRow.style.display = 'none';
+}
+
+
   var isHourly = document.getElementById('fd-billing').value === 'hourly';
   document.getElementById('fd-hours-group').style.display = isHourly ? '' : 'none';
   document.getElementById('fd-rate-group').style.display = isHourly ? '' : 'none';
@@ -2208,9 +2290,21 @@ function calcHourly(){
 }
 
 function saveDeal(id){
-  var client = document.getElementById('fd-client').value.trim();
-  if(!client){alert('Client name is required.');return;}
-  function dateOrNull(fid){var v=document.getElementById(fid).value;return v||null;}
+  // Client comes from hidden field (set by dropdown) or the new-client input
+  var hiddenClient = document.getElementById('fd-client');
+  var newClientInp = document.getElementById('fd-client-new');
+  var newRow = document.getElementById('fd-client-new-row');
+  var client = '';
+  if(hiddenClient && hiddenClient.value.trim()) {
+    client = hiddenClient.value.trim();
+  } else if(newRow && newRow.style.display !== 'none' && newClientInp && newClientInp.value.trim()) {
+    client = newClientInp.value.trim();
+    // Auto-save new client to list
+    if(!state.settings.jdzClients) state.settings.jdzClients = [];
+    if(state.settings.jdzClients.indexOf(client) < 0) { state.settings.jdzClients.push(client); saveSettings(); }
+  }
+  if(!client){alert('Please select or enter a client name.');return;}
+  function dateOrNull(fid){var v=document.getElementById(fid);return v&&v.value?v.value:null;}
   var data = {
     client_name: client,
     deal_type: document.getElementById('fd-type').value,
