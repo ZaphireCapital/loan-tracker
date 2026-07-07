@@ -1313,6 +1313,8 @@ function resetChecklistItems() {
   state.settings.checklistItems = CHECKLIST_ITEMS.map(function(item){return {id:item.id,section:item.section,label:item.label};});
   saveSettings(); renderSettings();
 }
+
+function addTag(key){
   var input=document.getElementById('tag-input-'+key);
   var val=input.value.trim();
   if(!val) return;
@@ -1630,7 +1632,7 @@ function showLoanForm(id){
   html+='<div class="modal-footer" style="justify-content:space-between">';
   html+='<div style="display:flex;gap:8px">';
   if(id) {
-    html+='<button class="btn btn-danger btn-sm" onclick="if(confirm(\'Move this loan to Trash?\'))closeModal();if(confirm(\'Move this loan to Trash?\'))deleteLoan('+id+')">&#128465; Move to Trash</button>';
+    html+='<button class="btn btn-danger btn-sm" onclick="closeModal();deleteLoan('+id+')">&#128465; Move to Trash</button>';
     var lCheck = state.loans.find(function(x){return x.id===id;});
     var canCL = lCheck && (lCheck.status==='Closed'||lCheck.status==='Withdrawn'||lCheck.status==='Denied') && lCheck.closing_date;
     if(canCL) html+='<button class="btn btn-teal btn-sm" onclick="closeModal();openChecklist('+id+')">&#x1F9F9; Checklist</button>';
