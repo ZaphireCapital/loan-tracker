@@ -2695,11 +2695,13 @@ function openChecklist(loanId) {
   if(!checklistState[loanId]) checklistState[loanId] = {};
   var cs = checklistState[loanId];
 
-  // Use custom checklist items from settings if set
   var items = (state.settings.checklistItems && state.settings.checklistItems.length)
     ? state.settings.checklistItems
     : CHECKLIST_ITEMS;
-  CHECKLIST_ITEMS.forEach(function(item){
+
+  var sections = {};
+  var sectionOrder = [];
+  items.forEach(function(item){
     if(!sections[item.section]){sections[item.section]=[];sectionOrder.push(item.section);}
     sections[item.section].push(item);
   });
