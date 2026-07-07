@@ -554,7 +554,7 @@ function miniTile(color, label, val) {
 
 // ── NAVIGATION ───────────────────────────────
 var currentPage = 'dashboard';
-var loanFilter = {search:'', status:'', type:''};
+var loanFilter = {search:'', status:'', type:'', sortKey:'borrower', sortDir:'asc', cleaned:''};
 var settingsTab = 'dropdowns';
 
 // ── COMPANY SWITCHER ─────────────────────────
@@ -776,8 +776,40 @@ function renderLoans(){
     if(loanFilter.search&&l.borrower.toLowerCase().indexOf(loanFilter.search.toLowerCase())<0) return false;
     if(loanFilter.status&&l.status!==loanFilter.status) return false;
     if(loanFilter.type&&l.type!==loanFilter.type) return false;
+    if(loanFilter.cleaned==='needs') {
+      // Closed + has closing date + NOT cleaned
+      if(!(l.status==='Closed' && l.closing_date && !l.cleaned_closed)) return false;
+    }
+    if(loanFilter.cleaned==='done') {
+      if(!l.cleaned_closed) return false;
+    }
     return true;
   });
+
+  // Sort
+  var sortKey = loanFilter.sortKey || 'borrower';
+  var sortDir = loanFilter.sortDir || 'asc';
+  allLoans = allLoans.slice().sort(function(a,b){
+    var av, bv;
+    if(sortKey==='borrower')      { av=a.borrower||''; bv=b.borrower||''; }
+    else if(sortKey==='loan_amount')  { av=+(a.loan_amount||0); bv=+(b.loan_amount||0); }
+    else if(sortKey==='type')         { av=a.type||''; bv=b.type||''; }
+    else if(sortKey==='closing_date') { av=a.closing_date||''; bv=b.closing_date||''; }
+    else if(sortKey==='expected_close_date') { av=a.expected_close_date||''; bv=b.expected_close_date||''; }
+    else if(sortKey==='expected_fund_date')  { av=a.expected_fund_date||''; bv=b.expected_fund_date||''; }
+    else if(sortKey==='gross_earnings') { av=+(a.gross_earnings||0); bv=+(b.gross_earnings||0); }
+    else if(sortKey==='zaphire_cut')    { av=+(a.zaphire_cut||0); bv=+(b.zaphire_cut||0); }
+    else if(sortKey==='deric_amount')   { av=+(a.deric_amount||0); bv=+(b.deric_amount||0); }
+    else { av=''; bv=''; }
+    if(av<bv) return sortDir==='asc'?-1:1;
+    if(av>bv) return sortDir==='asc'?1:-1;
+    return 0;
+  });
+
+  // Count files needing cleaning (closed + has closing date + not cleaned)
+  var needsCleaningCount = state.loans.filter(function(l){
+    return l.status==='Closed' && l.closing_date && !l.cleaned_closed;
+  }).length;
 
   html+='<div class="search-row">';
   html+='<input type="text" placeholder="Search borrower..." value="'+esc(loanFilter.search)+'" oninput="loanFilter.search=this.value;renderLoans()" style="max-width:240px">';
@@ -785,13 +817,55 @@ function renderLoans(){
   state.settings.loanStatuses.forEach(function(s){html+='<option value="'+esc(s)+'"'+(loanFilter.status===s?' selected':'')+'>'+esc(s)+'</option>';});
   html+='</select><select onchange="loanFilter.type=this.value;renderLoans()"><option value="">All Types</option>';
   state.settings.loanTypes.forEach(function(t){html+='<option value="'+esc(t)+'"'+(loanFilter.type===t?' selected':'')+'>'+esc(t)+'</option>';});
-  html+='</select><span style="color:var(--muted);font-size:13px">'+allLoans.length+' loan'+(allLoans.length!==1?'s':'')+'</span></div>';
+  html+='</select>';
+  // Needs cleaning filter
+  html+='<select onchange="loanFilter.cleaned=this.value;renderLoans()" style="max-width:200px">';
+  html+='<option value="">All Files</option>';
+  html+='<option value="needs"'+(loanFilter.cleaned==='needs'?' selected':'')+'>&#x1F9F9; Needs Cleaning'+(needsCleaningCount?' ('+needsCleaningCount+')':'')+'</option>';
+  html+='<option value="done"'+(loanFilter.cleaned==='done'?' selected':'')+'>&#10003; Cleaned &amp; Closed</option>';
+  html+='</select>';
+  html+='<span style="color:var(--muted);font-size:13px">'+allLoans.length+' loan'+(allLoans.length!==1?'s':'')+'</span></div>';
 
-  html+='<div class="card"><div class="table-wrap"><table><thead><tr><th>Borrower</th><th>Loan Amount</th><th>Type</th><th>Actual Close</th><th>Exp. Close</th><th>Exp. Fund</th><th>Gross</th><th>Zaphire</th><th>Deric</th><th>Status</th><th></th></tr></thead><tbody>';
+  // Needs-cleaning alert banner
+  if(needsCleaningCount && loanFilter.cleaned !== 'needs') {
+    html+='<div style="background:rgba(230,57,70,0.1);border:1px solid rgba(230,57,70,0.3);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px">';
+    html+='<div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">&#x1F9F9;</span><span style="font-size:13px;color:var(--white)"><strong>'+needsCleaningCount+' closed file'+(needsCleaningCount!==1?'s':'')+' need cleaning</strong> — closed with a date but not yet marked as Cleaned &amp; Closed.</span></div>';
+    html+='<button class="btn btn-sm" style="background:rgba(230,57,70,0.2);color:var(--red);border:1px solid rgba(230,57,70,0.4);flex-shrink:0" onclick="loanFilter.cleaned=\'needs\';renderLoans()">Show List</button>';
+    html+='</div>';
+  }
+
+  // Active "needs cleaning" mode banner
+  if(loanFilter.cleaned==='needs') {
+    html+='<div style="background:rgba(230,57,70,0.08);border:1px solid rgba(230,57,70,0.25);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px">';
+    html+='<div style="font-size:13px;color:var(--red)">&#x1F9F9; Showing <strong>'+allLoans.length+' file'+(allLoans.length!==1?'s':'')+' that need cleaning</strong> — closed with a date, not yet marked Cleaned &amp; Closed</div>';
+    html+='<button class="btn btn-ghost btn-sm" onclick="loanFilter.cleaned=\'\';renderLoans()">&#10005; Clear filter</button>';
+    html+='</div>';
+  }
+
+  function sortTh(label, key) {
+    var isActive = sortKey===key;
+    var arrow = isActive ? (sortDir==='asc'?' &#9650;':' &#9660;') : ' <span style="opacity:0.25">&#8597;</span>';
+    return '<th style="cursor:pointer;user-select:none;white-space:nowrap'+(isActive?';color:var(--gold)':'')+'" onclick="loanFilter.sortKey=\''+key+'\';loanFilter.sortDir=(\''+(isActive?sortDir:'')+'\' === \'asc\' && \''+key+'\'===\''+sortKey+'\' ? \'desc\' : \'asc\');renderLoans()">'+label+arrow+'</th>';
+  }
+
+  html+='<div class="card"><div class="table-wrap"><table><thead><tr>';
+  html+=sortTh('Borrower','borrower');
+  html+=sortTh('Loan Amount','loan_amount');
+  html+=sortTh('Type','type');
+  html+=sortTh('Actual Close','closing_date');
+  html+=sortTh('Exp. Close','expected_close_date');
+  html+=sortTh('Exp. Fund','expected_fund_date');
+  html+=sortTh('Gross','gross_earnings');
+  html+=sortTh('Zaphire','zaphire_cut');
+  html+=sortTh('Deric','deric_amount');
+  html+='<th>Status</th><th>Cleaned</th><th></th>';
+  html+='</tr></thead><tbody>';
+
   if(allLoans.length){
     allLoans.forEach(function(l){
+      var isCleaned = !!l.cleaned_closed;
       html+='<tr>';
-      html+='<td onclick="openLoanDetail('+l.id+')" style="max-width:200px"><strong>'+esc(l.borrower)+'</strong>';
+      html+='<td onclick="openLoanDetail('+l.id+')" style="max-width:200px;cursor:pointer"><strong>'+esc(l.borrower)+'</strong>';
       if(l.pipeline_notes) html+='<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">'+esc(l.pipeline_notes)+'</div>';
       html+='</td>';
       html+='<td class="mono">'+fmtDollar(l.loan_amount)+'</td>';
@@ -803,11 +877,19 @@ function renderLoans(){
       html+='<td class="mono">'+fmtDollar(l.zaphire_cut)+'</td>';
       html+='<td class="mono" style="color:var(--gold)">'+fmtDollar(l.deric_amount)+'</td>';
       html+='<td>'+badge(l.status)+'</td>';
-      html+='<td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditLoan('+l.id+')">Edit</button> <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteLoan('+l.id+')">Del</button></td>';
+      // Cleaned & Closed toggle
+      html+='<td style="text-align:center">';
+      if(isCleaned){
+        html+='<span title="Cleaned &amp; Closed" style="display:inline-flex;align-items:center;gap:5px;background:rgba(45,198,83,0.15);color:var(--green);border:1px solid rgba(45,198,83,0.3);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500;cursor:pointer" onclick="event.stopPropagation();toggleCleaned('+l.id+',false)">&#10003; Cleaned</span>';
+      } else {
+        html+='<span title="Mark as Cleaned &amp; Closed" style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.04);color:var(--muted);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:2px 10px;font-size:11px;cursor:pointer" onclick="event.stopPropagation();toggleCleaned('+l.id+',true)">&#9633; Clean</span>';
+      }
+      html+='</td>';
+      html+='<td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditLoan('+l.id+')">Edit</button> <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteLoan('+l.id+')">Del</button></td>';
       html+='</tr>';
     });
   } else {
-    html+='<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:40px">No loans found</td></tr>';
+    html+='<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:40px">No loans found</td></tr>';
   }
   html+='</tbody></table></div></div>';
   el.innerHTML=html;
@@ -1541,6 +1623,17 @@ function deleteLoan(id) {
     updateTrashBadge();
     setSyncStatus('saved', 'Moved to trash \u2713');
     showPage(currentPage);
+  }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
+}
+
+// ── CLEANED & CLOSED TOGGLE ───────────────────
+function toggleCleaned(id, cleaned) {
+  setSyncStatus('saving', 'Saving...');
+  apiPatch('zt_loans', id, {cleaned_closed: cleaned}).then(function(result){
+    var idx = state.loans.findIndex(function(l){return l.id===id;});
+    if(idx>=0) state.loans[idx].cleaned_closed = cleaned;
+    setSyncStatus('saved', cleaned ? 'Marked cleaned \u2713' : 'Unmarked');
+    renderLoans();
   }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
 }
 
