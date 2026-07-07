@@ -888,7 +888,10 @@ function renderLoans(){
         html+='<span title="Mark as Cleaned &amp; Closed" style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.04);color:var(--muted);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:2px 10px;font-size:11px;cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();toggleCleaned('+l.id+',true)">&#9633; Clean</span>';
       }
       html+='</td>';
-      html+='<td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditLoan('+l.id+')">Edit</button> <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteLoan('+l.id+')">Del</button></td>';
+      var canChecklist = (l.status==='Closed'||l.status==='Withdrawn'||l.status==='Denied') && l.closing_date;
+      html+='<td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditLoan('+l.id+')">Edit</button>';
+      if(canChecklist) html += ' <button class="btn btn-teal btn-sm" onclick="event.stopPropagation();openChecklist('+l.id+')" title="Closing Checklist">&#x1F9F9;</button>';
+      html+='</td>';
       html+='</tr>';
     });
   } else {
@@ -914,6 +917,7 @@ function renderClosed(){
       html+='</div><div style="display:flex;gap:8px;flex-shrink:0">';
       html+='<button class="btn btn-teal btn-sm" onclick="editClosedNote('+l.id+')">&#9998; Notes</button>';
       html+='<button class="btn btn-outline btn-sm" onclick="openLoanDetail('+l.id+')">View</button>';
+      html+='<button class="btn btn-ghost btn-sm" onclick="openChecklist('+l.id+')" title="Closing Checklist">&#x1F9F9; Checklist</button>';
       html+='</div></div>';
       html+=note?'<div class="closed-file-notes">'+esc(note).replace(/\n/g,'<br>')+'</div>':'<div class="closed-file-notes" style="font-style:italic;opacity:0.4">No notes. Click Notes to add details.</div>';
       html+='<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">';
@@ -1164,7 +1168,7 @@ function renderSettings(){
   var el=document.getElementById('content');
   var s=state.settings;
   var html='<div class="tabs">';
-  var tabs={dropdowns:'Dropdown Options',comp:'Compensation',backup:'&#128190; Backup',general:'General'};
+  var tabs={dropdowns:'Dropdown Options',comp:'Compensation',checklist:'&#x1F9F9; Checklist',backup:'&#128190; Backup',general:'General'};
   Object.keys(tabs).forEach(function(t){
     html+='<div class="tab'+(settingsTab===t?' active':'')+'" onclick="settingsTab=\''+t+'\';renderSettings()">'+tabs[t]+'</div>';
   });
@@ -1182,6 +1186,8 @@ function renderSettings(){
     html+='<div class="form-group"><label>Deric Split % (of gross)</label><div class="input-prefix"><span>%</span><input type="number" step="0.1" value="'+s.dericSplitPct+'" oninput="state.settings.dericSplitPct=+this.value;saveSettings()"></div></div>';
     html+='<div class="form-group"><label>Jules Split % (of gross)</label><div class="input-prefix"><span>%</span><input type="number" step="0.1" value="'+s.julesSplitPct+'" oninput="state.settings.julesSplitPct=+this.value;saveSettings()"></div></div>';
     html+='</div></div>';
+  } else if(settingsTab==='checklist'){
+    html+=renderChecklistSettings();
   } else if(settingsTab==='backup'){
     html+=renderBackupTab();
   } else {
@@ -1206,7 +1212,107 @@ function tagEditor(title,key){
   return html;
 }
 
-function addTag(key){
+function renderChecklistSettings() {
+  // Use customChecklistItems from settings if set, otherwise fall back to CHECKLIST_ITEMS
+  if(!state.settings.checklistItems) {
+    state.settings.checklistItems = CHECKLIST_ITEMS.map(function(item){return {id:item.id,section:item.section,label:item.label};});
+  }
+  var items = state.settings.checklistItems;
+
+  // Group by section
+  var sections = {};
+  var sectionOrder = [];
+  items.forEach(function(item){
+    if(!sections[item.section]){sections[item.section]=[];sectionOrder.push(item.section);}
+    sections[item.section].push(item);
+  });
+
+  var html = '<div class="card" style="margin-bottom:16px">';
+  html += '<div class="card-header"><div><div class="card-title">Closing Checklist Items</div><div class="card-sub">'+items.length+' items &mdash; these appear on every closing checklist</div></div>';
+  html += '<button class="btn btn-outline btn-sm" onclick="resetChecklistItems()">&#8635; Reset to defaults</button></div>';
+
+  sectionOrder.forEach(function(section) {
+    html += '<div style="margin-bottom:16px">';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border)">'+esc(section)+'</div>';
+    sections[section].forEach(function(item) {
+      var idx = items.indexOf(item);
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04)">';
+      html += '<span style="flex:1;font-size:13px;color:var(--white)">'+esc(item.label)+'</span>';
+      html += '<button class="btn btn-ghost btn-sm" onclick="editChecklistItem('+idx+')">Edit</button>';
+      html += '<button class="btn btn-danger btn-sm" onclick="removeChecklistItem('+idx+')">&#215;</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+
+  html += '</div>';
+
+  // Add new item
+  html += '<div class="card">';
+  html += '<div class="card-title" style="margin-bottom:14px">Add checklist item</div>';
+  html += '<div class="form-grid">';
+  html += '<div class="form-group"><label>Item label</label><input type="text" id="cl-new-label" placeholder="e.g. Upload to shared drive..."></div>';
+  html += '<div class="form-group"><label>Section</label><select id="cl-new-section">';
+  var defaultSections = ['Systems & records','Documents to print / pull','Calendars & logs','Copy folders'];
+  defaultSections.forEach(function(s){html+='<option value="'+esc(s)+'">'+esc(s)+'</option>';});
+  html += '<option value="__custom__">+ New section...</option>';
+  html += '</select></div>';
+  html += '<div class="form-group full" id="cl-custom-section-row" style="display:none"><label>New section name</label><input type="text" id="cl-custom-section" placeholder="Section name..."></div>';
+  html += '</div>';
+  html += '<button class="btn btn-gold" style="margin-top:12px" onclick="addChecklistItem()">Add to checklist</button>';
+  html += '</div>';
+  return html;
+}
+
+function addChecklistItem() {
+  var label = document.getElementById('cl-new-label').value.trim();
+  if(!label){alert('Please enter an item label.');return;}
+  var sectionEl = document.getElementById('cl-new-section');
+  var section = sectionEl.value;
+  if(section==='__custom__') {
+    section = (document.getElementById('cl-custom-section').value||'').trim();
+    if(!section){alert('Please enter a section name.');return;}
+  }
+  if(!state.settings.checklistItems) state.settings.checklistItems = CHECKLIST_ITEMS.slice();
+  var id = 'custom_'+Date.now();
+  state.settings.checklistItems.push({id:id, section:section, label:label});
+  saveSettings();
+  settingsTab='checklist';
+  renderSettings();
+}
+
+function removeChecklistItem(idx) {
+  if(!confirm('Remove this item from the checklist?')) return;
+  state.settings.checklistItems.splice(idx,1);
+  saveSettings(); settingsTab='checklist'; renderSettings();
+}
+
+function editChecklistItem(idx) {
+  var item = state.settings.checklistItems[idx];
+  var html = '<div class="modal-title">Edit Checklist Item</div>';
+  html += '<div class="form-grid" style="margin-top:16px">';
+  html += '<div class="form-group full"><label>Label</label><input type="text" id="cl-edit-label" value="'+esc(item.label)+'"></div>';
+  html += '<div class="form-group full"><label>Section</label><input type="text" id="cl-edit-section" value="'+esc(item.section)+'"></div>';
+  html += '</div>';
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button>';
+  html += '<button class="btn btn-gold" onclick="saveChecklistItemEdit('+idx+')">Save</button></div>';
+  openModal(html);
+}
+
+function saveChecklistItemEdit(idx) {
+  var label = document.getElementById('cl-edit-label').value.trim();
+  var section = document.getElementById('cl-edit-section').value.trim();
+  if(!label||!section){alert('Label and section are required.');return;}
+  state.settings.checklistItems[idx].label = label;
+  state.settings.checklistItems[idx].section = section;
+  saveSettings(); closeModal(); settingsTab='checklist'; renderSettings();
+}
+
+function resetChecklistItems() {
+  if(!confirm('Reset checklist to the original 28 default items? This cannot be undone.')) return;
+  state.settings.checklistItems = CHECKLIST_ITEMS.map(function(item){return {id:item.id,section:item.section,label:item.label};});
+  saveSettings(); renderSettings();
+}
   var input=document.getElementById('tag-input-'+key);
   var val=input.value.trim();
   if(!val) return;
@@ -1521,7 +1627,17 @@ function showLoanForm(id){
   html+='<div class="form-group full"><label>Pipeline Notes</label><textarea id="f-pipeline-notes" rows="2" placeholder="e.g. Waiting on appraisal...">'+esc(v('pipeline_notes'))+'</textarea></div>';
   html+='<div class="form-group full"><label>General Notes</label><textarea id="f-notes" rows="2">'+esc(v('notes'))+'</textarea></div>';
   html+='</div>';
-  html+='<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveLoan('+(id||'null')+')">'+(l?'Save Changes':'Add Loan')+'</button></div>';
+  html+='<div class="modal-footer" style="justify-content:space-between">';
+  html+='<div style="display:flex;gap:8px">';
+  if(id) {
+    html+='<button class="btn btn-danger btn-sm" onclick="if(confirm(\'Move this loan to Trash?\'))closeModal();if(confirm(\'Move this loan to Trash?\'))deleteLoan('+id+')">&#128465; Move to Trash</button>';
+    var lCheck = state.loans.find(function(x){return x.id===id;});
+    var canCL = lCheck && (lCheck.status==='Closed'||lCheck.status==='Withdrawn'||lCheck.status==='Denied') && lCheck.closing_date;
+    if(canCL) html+='<button class="btn btn-teal btn-sm" onclick="closeModal();openChecklist('+id+')">&#x1F9F9; Checklist</button>';
+  }
+  html+='</div>';
+  html+='<div style="display:flex;gap:8px"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveLoan('+(id||'null')+')">'+(l?'Save Changes':'Add Loan')+'</button></div>';
+  html+='</div>';
   openModal(html);
   calcCompFields();
 }
@@ -2577,17 +2693,19 @@ function openChecklist(loanId) {
   if(!checklistState[loanId]) checklistState[loanId] = {};
   var cs = checklistState[loanId];
 
-  var sections = {};
-  var sectionOrder = [];
+  // Use custom checklist items from settings if set
+  var items = (state.settings.checklistItems && state.settings.checklistItems.length)
+    ? state.settings.checklistItems
+    : CHECKLIST_ITEMS;
   CHECKLIST_ITEMS.forEach(function(item){
     if(!sections[item.section]){sections[item.section]=[];sectionOrder.push(item.section);}
     sections[item.section].push(item);
   });
 
-  var done = CHECKLIST_ITEMS.filter(function(item){return !!cs[item.id];}).length;
-  var total = CHECKLIST_ITEMS.length;
-  var pct = Math.round(done/total*100);
-  var allDone = done===total;
+  var done = items.filter(function(item){return !!cs[item.id];}).length;
+  var total = items.length;
+  var pct = total>0?Math.round(done/total*100):0;
+  var allDone = total>0&&done===total;
 
   var html = '';
 
@@ -2650,11 +2768,12 @@ function toggleCheckItem(loanId, itemId) {
 
 function finishChecklist(loanId) {
   var cs = checklistState[loanId]||{};
+  var items = (state.settings.checklistItems && state.settings.checklistItems.length) ? state.settings.checklistItems : CHECKLIST_ITEMS;
   var notesEl = document.getElementById('checklist-notes');
   if(notesEl) cs.finalNotes = notesEl.value;
   var today = new Date().toISOString().slice(0,10);
   var html = '<div class="modal-title">&#9989; Mark as Cleaned &amp; Closed</div>';
-  html += '<div class="modal-sub">All '+CHECKLIST_ITEMS.length+' checklist items complete</div>';
+  html += '<div class="modal-sub">All '+items.length+' checklist items complete</div>';
   html += '<div class="form-group" style="margin-bottom:20px"><label>Date Cleaned</label>';
   html += '<input type="date" id="cleaned-date-input" value="'+today+'"></div>';
   if(cs.finalNotes) {
