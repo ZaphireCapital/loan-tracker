@@ -1423,8 +1423,21 @@ function renderBackupTab() {
 function openLoanDetail(id){
   var l=state.loans.find(function(x){return x.id===id;});
   if(!l) return;
+  var canChecklist = (l.status==='Closed'||l.status==='Withdrawn'||l.status==='Denied') && l.closing_date;
   var html='<div class="modal-title">'+esc(l.borrower)+'</div>';
   html+='<div class="modal-sub">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+' &middot; '+fmtDate(l.closing_date)+'</div>';
+
+  // Cleaned status banner
+  if(l.cleaned_closed) {
+    html+='<div style="background:rgba(45,198,83,0.1);border:1px solid rgba(45,198,83,0.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">';
+    html+='<span style="font-size:18px">&#9989;</span><div><div style="font-size:13px;font-weight:600;color:var(--green)">File Cleaned &amp; Closed</div>';
+    html+='<div style="font-size:11px;color:var(--muted)">Cleaned on '+fmtDate(l.cleaned_date)+'</div></div></div>';
+  } else if(canChecklist) {
+    html+='<div style="background:rgba(230,57,70,0.08);border:1px solid rgba(230,57,70,0.25);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px">';
+    html+='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">&#x1F9F9;</span><span style="font-size:13px;color:var(--red)">File not yet cleaned</span></div>';
+    html+='<button class="btn btn-sm" style="background:rgba(230,57,70,0.15);color:var(--red);border:1px solid rgba(230,57,70,0.3);flex-shrink:0" onclick="closeModal();openChecklist('+l.id+')">Open Checklist &rarr;</button></div>';
+  }
+
   html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">';
   html+=miniTile('var(--gold-light)','Gross',fmtDollar(l.gross_earnings));
   html+=miniTile('var(--teal-light)','Zaphire '+(l.zaphire_pct||35)+'%',fmtDollar(l.zaphire_cut));
@@ -1441,7 +1454,9 @@ function openLoanDetail(id){
   html+='</div>';
   if(l.notes) html+='<div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:12px;font-size:13px;color:var(--muted);margin-bottom:12px"><strong style="color:var(--white)">Notes:</strong> '+esc(l.notes)+'</div>';
   if(state.closedNotes[l.id]) html+='<div style="background:rgba(42,157,143,0.08);border:1px solid rgba(42,157,143,0.2);border-radius:8px;padding:12px;font-size:13px;color:var(--teal-light);margin-bottom:12px"><strong>File Notes:</strong> '+esc(state.closedNotes[l.id])+'</div>';
-  html+='<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button><button class="btn btn-teal" onclick="closeModal();editClosedNote('+l.id+')">&#9998; File Notes</button><button class="btn btn-gold" onclick="closeModal();openEditLoan('+l.id+')">&#9998; Edit Loan</button></div>';
+  html+='<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+  if(canChecklist) html+='<button class="btn btn-teal" onclick="closeModal();openChecklist('+l.id+')">&#x1F9F9; Closing Checklist</button>';
+  html+='<button class="btn btn-outline" onclick="closeModal();editClosedNote('+l.id+')">&#9998; File Notes</button><button class="btn btn-gold" onclick="closeModal();openEditLoan('+l.id+')">&#9998; Edit</button></div>';
   openModal(html);
 }
 
@@ -1665,9 +1680,20 @@ function saveCleanedDate(id) {
   apiPatch('zt_loans', id, {cleaned_closed: true, cleaned_date: dateVal}).then(function(){
     var idx = state.loans.findIndex(function(l){return l.id===id;});
     if(idx>=0){state.loans[idx].cleaned_closed=true;state.loans[idx].cleaned_date=dateVal;}
+    // Also save final notes from checklist to closed file notes if present
+    var cs = checklistState[id]||{};
+    if(cs.finalNotes && cs.finalNotes.trim()) {
+      var existing = state.closedNotes[id]||'';
+      var combined = existing ? existing+'\n\n[Closing checklist notes] '+cs.finalNotes : '[Closing checklist notes] '+cs.finalNotes;
+      apiGet('zt_notes','select=*&loan_id=eq.'+id).then(function(rows){
+        var promise = rows&&rows.length>0
+          ? apiPatch('zt_notes',rows[0].id,{note:combined,updated_at:new Date().toISOString()})
+          : apiPost('zt_notes',[{loan_id:id,note:combined}]);
+        promise.then(function(){state.closedNotes[id]=combined;});
+      });
+    }
     setSyncStatus('saved','Marked cleaned \u2713');
-    closeModal();
-    renderLoans();
+    closeModal(); renderLoans();
   }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
 }
 
@@ -2510,8 +2536,148 @@ function emptyJdzTrash(){
   }).catch(function(e){alert('Error: '+e.message);});
 }
 
-// ── UPDATE EARNINGS PAGE TO INCLUDE JDZ ──────
-// (earnings page already calls renderEarnings — patch it to show combined view)
+// ── CLOSING CHECKLIST ─────────────────────────
+
+var CHECKLIST_ITEMS = [
+  {id:'excel',      section:'Systems & records',        label:'Update master Excel spreadsheet'},
+  {id:'lp_fields',  section:'Systems & records',        label:'Update Lending Pad custom fields'},
+  {id:'lp_status',  section:'Systems & records',        label:'Update Lending Pad status'},
+  {id:'lp_move',    section:'Systems & records',        label:'Move Lending Pad file to closed'},
+  {id:'ny_log',     section:'Documents to print / pull',label:'NY application log (print from Lending Pad)'},
+  {id:'aml',        section:'Documents to print / pull',label:'Anti-money laundering form (print from Lending Pad)'},
+  {id:'cd_fees',    section:'Documents to print / pull',label:'Closing disclosure — fees matched on Lending Pad'},
+  {id:'cd',         section:'Documents to print / pull',label:'Closing disclosure'},
+  {id:'note',       section:'Documents to print / pull',label:'Note'},
+  {id:'mortgage',   section:'Documents to print / pull',label:'Mortgage'},
+  {id:'rescission', section:'Documents to print / pull',label:'Right of rescission signed (refi only)'},
+  {id:'cd_prior',   section:'Documents to print / pull',label:'CD sent out prior to closing (3 days prior)'},
+  {id:'orig_disc',  section:'Documents to print / pull',label:'Original disclosure form — submission'},
+  {id:'orig_1003',  section:'Documents to print / pull',label:'Original 1003'},
+  {id:'orig_discs', section:'Documents to print / pull',label:'Original disclosures'},
+  {id:'checks',     section:'Documents to print / pull',label:'Checks / wire transfer to Zaphire Capital'},
+  {id:'rate_lock',  section:'Documents to print / pull',label:'Rate lock — final rate lock'},
+  {id:'contacts',   section:'Documents to print / pull',label:'Print contact list (snapshot of service contacts)'},
+  {id:'cal',        section:'Calendars & logs',         label:'Add file to closing calendar'},
+  {id:'ny_ct_log',  section:'Calendars & logs',         label:'Add file to NY/CT yearly log'},
+  {id:'fannie',     section:'Calendars & logs',         label:'Export Fannie Mae 3.4 file to closed file'},
+  {id:'pipeline',   section:'Calendars & logs',         label:'Move pipeline folder to closing folder area'},
+  {id:'f_appraisal',    section:'Copy folders',         label:'Appraisal folder'},
+  {id:'f_closing',      section:'Copy folders',         label:'Closing docs folder'},
+  {id:'f_commitment',   section:'Copy folders',         label:'Commitment & approvals folder'},
+  {id:'f_conditions',   section:'Copy folders',         label:'Conditions folder'},
+  {id:'f_rate',         section:'Copy folders',         label:'Rate lock & pricing folder'},
+  {id:'f_submission',   section:'Copy folders',         label:'Submission pkg & redisclosure docs folder'}
+];
+
+var checklistState = {};
+
+function openChecklist(loanId) {
+  var l = state.loans.find(function(x){return x.id===loanId;});
+  if(!l) return;
+  if(!checklistState[loanId]) checklistState[loanId] = {};
+  var cs = checklistState[loanId];
+
+  var sections = {};
+  var sectionOrder = [];
+  CHECKLIST_ITEMS.forEach(function(item){
+    if(!sections[item.section]){sections[item.section]=[];sectionOrder.push(item.section);}
+    sections[item.section].push(item);
+  });
+
+  var done = CHECKLIST_ITEMS.filter(function(item){return !!cs[item.id];}).length;
+  var total = CHECKLIST_ITEMS.length;
+  var pct = Math.round(done/total*100);
+  var allDone = done===total;
+
+  var html = '';
+
+  if(l.cleaned_closed) {
+    html += '<div style="background:rgba(45,198,83,0.1);border:1px solid rgba(45,198,83,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">';
+    html += '<span style="font-size:20px">&#9989;</span><div><div style="font-weight:600;color:var(--green)">File Cleaned &amp; Closed</div>';
+    html += '<div style="font-size:12px;color:var(--muted)">Completed '+fmtDate(l.cleaned_date)+'</div></div></div>';
+  }
+
+  html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px">';
+  html += '<div><div class="modal-title" style="margin-bottom:2px">&#x1F9F9; Closing Checklist</div>';
+  html += '<div style="font-size:12px;color:var(--muted)">'+esc(l.borrower)+' &middot; '+esc(l.type)+' &middot; '+fmtDate(l.closing_date)+'</div></div>';
+  html += '<div style="text-align:right;flex-shrink:0"><div style="font-family:\'JetBrains Mono\',monospace;font-size:22px;color:'+(allDone?'var(--green)':'var(--gold)')+'">'+done+'/'+total+'</div><div style="font-size:11px;color:var(--muted)">items done</div></div></div>';
+
+  html += '<div style="margin:10px 0 18px">';
+  html += '<div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden">';
+  html += '<div style="height:100%;width:'+pct+'%;background:'+(allDone?'var(--green)':'var(--gold)')+';border-radius:4px"></div></div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+pct+'% complete</div></div>';
+
+  sectionOrder.forEach(function(section) {
+    html += '<div style="margin-bottom:16px">';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border)">'+esc(section)+'</div>';
+    sections[section].forEach(function(item) {
+      var checked = !!cs[item.id];
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer" onclick="toggleCheckItem('+loanId+',\''+item.id+'\')">';
+      html += '<div style="width:18px;height:18px;border-radius:4px;border:2px solid '+(checked?'var(--green)':'rgba(255,255,255,0.2)')+';background:'+(checked?'var(--green)':'transparent')+';flex-shrink:0;display:flex;align-items:center;justify-content:center">';
+      if(checked) html += '<span style="color:white;font-size:11px;line-height:1">&#10003;</span>';
+      html += '</div>';
+      html += '<span style="font-size:13px;color:'+(checked?'var(--muted)':'var(--white)')+';'+(checked?'text-decoration:line-through;':'')+'">'+ esc(item.label)+'</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+
+  html += '<div style="margin-bottom:16px">';
+  html += '<div style="font-size:10px;font-weight:600;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Final notes on file</div>';
+  html += '<textarea id="checklist-notes" rows="3" placeholder="Add any final notes about this file..." style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:13px;padding:10px 12px;resize:vertical;outline:none">'+esc(cs.finalNotes||'')+'</textarea>';
+  html += '</div>';
+
+  html += '<div class="modal-footer">';
+  html += '<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+  if(l.cleaned_closed) {
+    html += '<button class="btn btn-outline" style="color:var(--red);border-color:rgba(230,57,70,0.4)" onclick="unmarkCleaned('+loanId+')">Unmark cleaned</button>';
+  } else {
+    var btnStyle = allDone ? '' : 'opacity:0.45;cursor:not-allowed';
+    var btnTitle = allDone ? '' : ' title="Complete all items first"';
+    html += '<button class="btn btn-gold"'+btnTitle+' style="'+btnStyle+'" onclick="'+(allDone?'finishChecklist('+loanId+')':'')+'">&#10003; Mark File Cleaned &amp; Closed</button>';
+  }
+  html += '</div>';
+  openModal(html);
+}
+
+function toggleCheckItem(loanId, itemId) {
+  if(!checklistState[loanId]) checklistState[loanId]={};
+  var notesEl = document.getElementById('checklist-notes');
+  if(notesEl) checklistState[loanId].finalNotes = notesEl.value;
+  checklistState[loanId][itemId] = !checklistState[loanId][itemId];
+  openChecklist(loanId);
+}
+
+function finishChecklist(loanId) {
+  var cs = checklistState[loanId]||{};
+  var notesEl = document.getElementById('checklist-notes');
+  if(notesEl) cs.finalNotes = notesEl.value;
+  var today = new Date().toISOString().slice(0,10);
+  var html = '<div class="modal-title">&#9989; Mark as Cleaned &amp; Closed</div>';
+  html += '<div class="modal-sub">All '+CHECKLIST_ITEMS.length+' checklist items complete</div>';
+  html += '<div class="form-group" style="margin-bottom:20px"><label>Date Cleaned</label>';
+  html += '<input type="date" id="cleaned-date-input" value="'+today+'"></div>';
+  if(cs.finalNotes) {
+    html += '<div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:12px;font-size:13px;color:var(--muted);margin-bottom:16px"><strong style="color:var(--white)">Final notes:</strong> '+esc(cs.finalNotes)+'</div>';
+  }
+  html += '<div class="modal-footer">';
+  html += '<button class="btn btn-ghost" onclick="openChecklist('+loanId+')">&#8592; Back to checklist</button>';
+  html += '<button class="btn btn-gold" onclick="saveCleanedDate('+loanId+')">&#10003; Confirm &amp; Save</button>';
+  html += '</div>';
+  openModal(html);
+}
+
+function unmarkCleaned(loanId) {
+  if(!confirm('Remove the Cleaned & Closed marker from this file?')) return;
+  setSyncStatus('saving','Saving...');
+  apiPatch('zt_loans', loanId, {cleaned_closed: false, cleaned_date: null}).then(function(){
+    var idx = state.loans.findIndex(function(l){return l.id===loanId;});
+    if(idx>=0){state.loans[idx].cleaned_closed=false;state.loans[idx].cleaned_date=null;}
+    setSyncStatus('saved','Unmarked \u2713');
+    closeModal(); renderLoans();
+  }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
+}
+
 // Change this to whatever password you want
 var APP_PASSWORD = 'Zaphire8558!';
 
