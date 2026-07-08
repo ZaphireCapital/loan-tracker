@@ -1795,14 +1795,27 @@ function saveCleanedDate(id) {
   var dateVal = document.getElementById('cleaned-date-input').value;
   if(!dateVal){alert('Please select a date.');return;}
   setSyncStatus('saving','Saving...');
-  apiPatch('zt_loans', id, {cleaned_closed: true, cleaned_date: dateVal}).then(function(){
+  var cs = checklistState[id]||{};
+  var finalNotes = cs.finalNotes||null;
+  apiPatch('zt_loans', id, {
+    cleaned_closed: true,
+    cleaned_date: dateVal,
+    checklist_progress: {},
+    checklist_notes: null
+  }).then(function(){
     var idx = state.loans.findIndex(function(l){return l.id===id;});
-    if(idx>=0){state.loans[idx].cleaned_closed=true;state.loans[idx].cleaned_date=dateVal;}
-    // Also save final notes from checklist to closed file notes if present
-    var cs = checklistState[id]||{};
-    if(cs.finalNotes && cs.finalNotes.trim()) {
+    if(idx>=0){
+      state.loans[idx].cleaned_closed=true;
+      state.loans[idx].cleaned_date=dateVal;
+      state.loans[idx].checklist_progress={};
+      state.loans[idx].checklist_notes=null;
+    }
+    // Clear memory too
+    checklistState[id] = {};
+    // Save final notes to closed file notes if present
+    if(finalNotes && finalNotes.trim()) {
       var existing = state.closedNotes[id]||'';
-      var combined = existing ? existing+'\n\n[Closing checklist notes] '+cs.finalNotes : '[Closing checklist notes] '+cs.finalNotes;
+      var combined = existing ? existing+'\n\n[Closing checklist notes] '+finalNotes : '[Closing checklist notes] '+finalNotes;
       apiGet('zt_notes','select=*&loan_id=eq.'+id).then(function(rows){
         var promise = rows&&rows.length>0
           ? apiPatch('zt_notes',rows[0].id,{note:combined,updated_at:new Date().toISOString()})
@@ -2692,7 +2705,14 @@ var checklistState = {};
 function openChecklist(loanId) {
   var l = state.loans.find(function(x){return x.id===loanId;});
   if(!l) return;
-  if(!checklistState[loanId]) checklistState[loanId] = {};
+
+  // Load saved progress from the loan record if not already in memory
+  if(!checklistState[loanId]) {
+    var saved = l.checklist_progress || {};
+    checklistState[loanId] = typeof saved === 'string' ? JSON.parse(saved) : saved;
+    // Also restore final notes
+    if(l.checklist_notes) checklistState[loanId].finalNotes = l.checklist_notes;
+  }
   var cs = checklistState[loanId];
 
   var items = (state.settings.checklistItems && state.settings.checklistItems.length)
@@ -2767,6 +2787,22 @@ function toggleCheckItem(loanId, itemId) {
   var notesEl = document.getElementById('checklist-notes');
   if(notesEl) checklistState[loanId].finalNotes = notesEl.value;
   checklistState[loanId][itemId] = !checklistState[loanId][itemId];
+
+  // Persist to Supabase immediately (save notes separately to avoid circular JSON issues)
+  var toSave = {};
+  Object.keys(checklistState[loanId]).forEach(function(k){
+    if(k !== 'finalNotes') toSave[k] = checklistState[loanId][k];
+  });
+  var notes = checklistState[loanId].finalNotes || null;
+  apiPatch('zt_loans', loanId, {checklist_progress: toSave, checklist_notes: notes}).then(function(result){
+    var saved = Array.isArray(result)?result[0]:result;
+    var idx = state.loans.findIndex(function(l){return l.id===loanId;});
+    if(idx>=0){
+      state.loans[idx].checklist_progress = saved.checklist_progress;
+      state.loans[idx].checklist_notes = saved.checklist_notes;
+    }
+  }).catch(function(e){ console.warn('Checklist save error:', e.message); });
+
   openChecklist(loanId);
 }
 
@@ -2775,6 +2811,8 @@ function finishChecklist(loanId) {
   var items = (state.settings.checklistItems && state.settings.checklistItems.length) ? state.settings.checklistItems : CHECKLIST_ITEMS;
   var notesEl = document.getElementById('checklist-notes');
   if(notesEl) cs.finalNotes = notesEl.value;
+  // Save notes to Supabase before showing date picker
+  apiPatch('zt_loans', loanId, {checklist_notes: cs.finalNotes||null}).catch(function(){});
   var today = new Date().toISOString().slice(0,10);
   var html = '<div class="modal-title">&#9989; Mark as Cleaned &amp; Closed</div>';
   html += '<div class="modal-sub">All '+items.length+' checklist items complete</div>';
