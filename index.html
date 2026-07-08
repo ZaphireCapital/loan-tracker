@@ -866,6 +866,7 @@ function renderLoans(){
       var isCleaned = !!l.cleaned_closed;
       html+='<tr>';
       html+='<td onclick="openLoanDetail('+l.id+')" style="max-width:200px;cursor:pointer"><strong>'+esc(l.borrower)+'</strong>';
+      if(l.loan_number) html+='<div style="font-size:11px;color:var(--gold);margin-top:2px;font-family:\'JetBrains Mono\',monospace">#'+esc(l.loan_number)+'</div>';
       if(l.pipeline_notes) html+='<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">'+esc(l.pipeline_notes)+'</div>';
       html+='</td>';
       html+='<td class="mono">'+fmtDollar(l.loan_amount)+'</td>';
@@ -913,7 +914,7 @@ function renderClosed(){
       html+='<div class="closed-file-card">';
       html+='<div class="closed-file-header"><div>';
       html+='<div class="closed-file-name">'+esc(l.borrower)+'</div>';
-      html+='<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+' &middot; Closed '+fmtDate(l.closing_date)+' &middot; Gross: '+fmtDollar(l.gross_earnings)+'</div>';
+      html+='<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+' &middot; Closed '+fmtDate(l.closing_date)+' &middot; Gross: '+fmtDollar(l.gross_earnings)+(l.loan_number?' &middot; <span style="font-family:\'JetBrains Mono\',monospace;color:var(--gold)">#'+esc(l.loan_number)+'</span>':'')+'</div>';
       html+='</div><div style="display:flex;gap:8px;flex-shrink:0">';
       html+='<button class="btn btn-teal btn-sm" onclick="editClosedNote('+l.id+')">&#9998; Notes</button>';
       html+='<button class="btn btn-outline btn-sm" onclick="openLoanDetail('+l.id+')">View</button>';
@@ -1533,7 +1534,7 @@ function openLoanDetail(id){
   if(!l) return;
   var canChecklist = (l.status==='Closed'||l.status==='Withdrawn'||l.status==='Denied') && l.closing_date;
   var html='<div class="modal-title">'+esc(l.borrower)+'</div>';
-  html+='<div class="modal-sub">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+' &middot; '+fmtDate(l.closing_date)+'</div>';
+  html+='<div class="modal-sub">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+' &middot; '+fmtDate(l.closing_date)+(l.loan_number?' &middot; <span style="font-family:\'JetBrains Mono\',monospace;color:var(--gold)">#'+esc(l.loan_number)+'</span>':'')+'</div>';
 
   // Cleaned status banner
   if(l.cleaned_closed) {
@@ -1554,6 +1555,7 @@ function openLoanDetail(id){
   html+='</div>';
   html+='<div class="form-grid cols3" style="font-size:13px;margin-bottom:16px">';
   html+='<div><div style="color:var(--muted);font-size:11px">STATUS</div>'+badge(l.status)+'</div>';
+  html+='<div><div style="color:var(--muted);font-size:11px">LOAN NUMBER</div><div style="font-family:\'JetBrains Mono\',monospace;color:var(--gold)">'+(l.loan_number?'#'+esc(l.loan_number):'\u2014')+'</div></div>';
   html+='<div><div style="color:var(--muted);font-size:11px">COMP %</div><div>'+(l.company_comp_pct||0)+'%</div></div>';
   html+='<div><div style="color:var(--muted);font-size:11px">TOLERANCE</div><div style="color:'+(+(l.tolerance||0)?'var(--red)':'var(--muted)')+'">'+fmtDollar(l.tolerance||0)+'</div></div>';
   html+='<div><div style="color:var(--muted);font-size:11px">EXP. CLOSE</div><div>'+(l.expected_close_date?fmtDate(l.expected_close_date):'\u2014')+'</div></div>';
@@ -1588,6 +1590,7 @@ function showLoanForm(id){
   html+='<div class="modal-sub">'+(l?esc(l.borrower):'Enter loan details below')+'</div>';
   html+='<div class="form-grid">';
   html+='<div class="form-group full"><label>Borrower Name(s)</label><input type="text" id="f-borrower" value="'+esc(v('borrower'))+'" placeholder="Last, First"></div>';
+  html+='<div class="form-group"><label>Loan Number <span style="color:var(--muted);font-weight:400">&#8212; optional</span></label><input type="text" id="f-loan-number" value="'+esc(v('loan_number'))+'" placeholder="e.g. 2026-0042"></div>';
   html+='<div class="form-group"><label>Loan Amount</label><div class="input-prefix"><span>$</span><input type="number" id="f-amount" value="'+v('loan_amount',0)+'" oninput="compPctChanged()"></div></div>';
   html+='<div class="form-group"><label>Actual Closing Date <span style="color:var(--muted);font-weight:400">&#8212; fill once closed</span></label><input type="date" id="f-date" value="'+v('closing_date')+'"></div>';
   html+='<div class="form-group"><label>Loan Type</label><select id="f-type">';
@@ -1713,6 +1716,7 @@ function saveLoan(id){
   function dateOrNull(field){var v=document.getElementById(field).value;return v||null;}
   var data={
     borrower:borrower,
+    loan_number:document.getElementById('f-loan-number').value.trim()||null,
     loan_amount:parseFloat(document.getElementById('f-amount').value)||0,
     closing_date:dateOrNull('f-date'),
     type:document.getElementById('f-type').value,
@@ -2741,7 +2745,7 @@ function openChecklist(loanId) {
 
   html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px">';
   html += '<div><div class="modal-title" style="margin-bottom:2px">&#x1F9F9; Closing Checklist</div>';
-  html += '<div style="font-size:12px;color:var(--muted)">'+esc(l.borrower)+' &middot; '+esc(l.type)+' &middot; '+fmtDate(l.closing_date)+'</div></div>';
+  html += '<div style="font-size:12px;color:var(--muted)">'+esc(l.borrower)+' &middot; '+esc(l.type)+' &middot; '+fmtDate(l.closing_date)+(l.loan_number?' &middot; <span style="font-family:\'JetBrains Mono\',monospace;color:var(--gold)">#'+esc(l.loan_number)+'</span>':'')+'</div></div>';
   html += '<div style="text-align:right;flex-shrink:0"><div style="font-family:\'JetBrains Mono\',monospace;font-size:22px;color:'+(allDone?'var(--green)':'var(--gold)')+'">'+done+'/'+total+'</div><div style="font-size:11px;color:var(--muted)">items done</div></div></div>';
 
   html += '<div style="margin:10px 0 18px">';
