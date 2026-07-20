@@ -910,17 +910,26 @@ function renderClosed(){
   html+='<div class="card-header"><div><div class="card-title">Closed File Notes</div><div class="card-sub">Click Notes to add details to any closed file</div></div></div>';
   if(closed.length){
     closed.forEach(function(l){
-      var note=state.closedNotes[l.id]||l.notes||'';
+      var noteEntries = parseNotes(state.closedNotes[l.id]||l.notes||'');
+      var latestNote = noteEntries.length ? noteEntries.slice().sort(function(a,b){return (b.t||'')>(a.t||'')?1:-1;})[0] : null;
       html+='<div class="closed-file-card">';
       html+='<div class="closed-file-header"><div>';
       html+='<div class="closed-file-name">'+esc(l.borrower)+'</div>';
       html+='<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+' &middot; Closed '+fmtDate(l.closing_date)+' &middot; Gross: '+fmtDollar(l.gross_earnings)+(l.loan_number?' &middot; <span style="font-family:\'JetBrains Mono\',monospace;color:var(--gold)">#'+esc(l.loan_number)+'</span>':'')+'</div>';
       html+='</div><div style="display:flex;gap:8px;flex-shrink:0">';
-      html+='<button class="btn btn-teal btn-sm" onclick="editClosedNote('+l.id+')">&#9998; Notes</button>';
+      html+='<button class="btn btn-teal btn-sm" onclick="editClosedNote('+l.id+')">&#9998; Notes'+(noteEntries.length?' ('+noteEntries.length+')':'')+'</button>';
       html+='<button class="btn btn-outline btn-sm" onclick="openLoanDetail('+l.id+')">View</button>';
       html+='<button class="btn btn-ghost btn-sm" onclick="openChecklist('+l.id+')" title="Closing Checklist">&#x1F9F9; Checklist</button>';
       html+='</div></div>';
-      html+=note?'<div class="closed-file-notes">'+esc(note).replace(/\n/g,'<br>')+'</div>':'<div class="closed-file-notes" style="font-style:italic;opacity:0.4">No notes. Click Notes to add details.</div>';
+      if(latestNote){
+        var prev=(latestNote.x||'').replace(/\n/g,' ');
+        if(prev.length>110) prev=prev.slice(0,110)+'...';
+        html+='<div class="closed-file-notes" style="cursor:pointer" onclick="editClosedNote('+l.id+')"><span style="font-size:11px;color:var(--gold);font-family:\'JetBrains Mono\',monospace">'+fmtNoteTime(latestNote.t)+'</span> &middot; '+esc(prev);
+        if(noteEntries.length>1) html+=' <span style="color:var(--teal-light)">+'+(noteEntries.length-1)+' more</span>';
+        html+='</div>';
+      } else {
+        html+='<div class="closed-file-notes" style="font-style:italic;opacity:0.4">No notes. Click Notes to add details.</div>';
+      }
       html+='<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">';
       if(+(l.tolerance||0)) html+='<span class="badge badge-closed">Tolerance: '+fmtDollar(l.tolerance)+'</span>';
       html+=badge(l.status)+' <span class="badge" style="background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid var(--border)">'+esc(l.type)+'</span>';
@@ -933,33 +942,167 @@ function renderClosed(){
   el.innerHTML=html;
 }
 
+// ── TIMESTAMPED NOTES HELPERS ────────────────
+// Notes are stored as a JSON array of {t: ISO timestamp, x: text} in zt_notes.note.
+// Legacy plain-text notes are auto-converted to a single entry on first view.
+function parseNotes(raw) {
+  if(!raw) return [];
+  if(Array.isArray(raw)) return raw;
+  if(typeof raw === 'string') {
+    var s = raw.trim();
+    if(s.charAt(0) === '[') {
+      try { var arr = JSON.parse(s); if(Array.isArray(arr)) return arr; } catch(e) {}
+    }
+    // Legacy plain text — wrap as a single undated entry
+    return [{t:null, x:raw}];
+  }
+  return [];
+}
+
+function fmtNoteTime(iso) {
+  if(!iso) return 'Earlier note';
+  var d = new Date(iso);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + ' at ' + d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+}
+
+function noteSummary(id) {
+  var entries = parseNotes(state.closedNotes[id]);
+  return entries.length;
+}
+
+// Render the collapsible timestamped notes list inside the modal
 function editClosedNote(id){
   var loan=state.loans.find(function(l){return l.id===id;});
-  var existing=state.closedNotes[id]||loan.notes||'';
+  var entries = parseNotes(state.closedNotes[id] || loan.notes || '');
+  // newest first
+  var sorted = entries.slice().sort(function(a,b){
+    return (b.t||'') > (a.t||'') ? 1 : -1;
+  });
+
   var html='<div class="modal-title">File Notes</div>';
-  html+='<div class="modal-sub">'+esc(loan.borrower)+' &middot; '+esc(loan.type)+' &middot; '+fmtDollar(loan.loan_amount)+'</div>';
-  html+='<div class="form-group"><label>Notes</label><textarea id="note-text" rows="8" style="min-height:160px">'+esc(existing)+'</textarea></div>';
-  html+='<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveClosedNote('+id+')">Save Notes</button></div>';
+  html+='<div class="modal-sub">'+esc(loan.borrower)+' &middot; '+esc(loan.type)+' &middot; '+fmtDollar(loan.loan_amount)+(loan.loan_number?' &middot; <span style="font-family:\'JetBrains Mono\',monospace;color:var(--gold)">#'+esc(loan.loan_number)+'</span>':'')+'</div>';
+
+  // Add-note box
+  html+='<div style="background:rgba(201,168,76,0.05);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:18px">';
+  html+='<label style="font-size:12px;color:var(--muted);font-weight:500;display:block;margin-bottom:8px">Add a new note</label>';
+  html+='<textarea id="new-note-text" rows="3" placeholder="Type your note — it will be timestamped automatically..." style="width:100%;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:13.5px;padding:10px 12px;resize:vertical;outline:none"></textarea>';
+  html+='<button class="btn btn-gold btn-sm" style="margin-top:10px" onclick="addTimestampedNote('+id+')">+ Add Note</button>';
+  html+='</div>';
+
+  // Notes history
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+  html+='<div style="font-size:11px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.1em;font-weight:600">Note History ('+sorted.length+')</div>';
+  if(sorted.length>1) html+='<button class="btn btn-ghost btn-sm" onclick="toggleAllNotes()" id="toggle-all-btn">Expand all</button>';
+  html+='</div>';
+
+  if(!sorted.length){
+    html+='<div style="text-align:center;padding:30px;color:var(--muted);font-style:italic;font-size:13px">No notes yet. Add your first note above.</div>';
+  } else {
+    html+='<div id="notes-list">';
+    sorted.forEach(function(entry, i){
+      var preview = (entry.x||'').replace(/\n/g,' ');
+      var isLong = preview.length > 90;
+      var shortPreview = isLong ? preview.slice(0,90)+'...' : preview;
+      html+='<div class="note-entry" style="border:1px solid rgba(255,255,255,0.07);border-radius:8px;margin-bottom:8px;overflow:hidden">';
+      // Header — always visible, click to expand
+      html+='<div onclick="toggleNoteEntry('+i+')" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;cursor:pointer;background:rgba(255,255,255,0.02)">';
+      html+='<div style="flex:1;min-width:0">';
+      html+='<div style="font-size:11px;color:var(--gold);font-family:\'JetBrains Mono\',monospace;margin-bottom:3px">'+fmtNoteTime(entry.t)+'</div>';
+      html+='<div class="note-preview" id="note-preview-'+i+'" style="font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(shortPreview)+'</div>';
+      html+='</div>';
+      html+='<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">';
+      html+='<span class="note-caret" id="note-caret-'+i+'" style="color:var(--muted);font-size:12px;transition:transform 0.15s">&#9654;</span>';
+      html+='</div></div>';
+      // Body — hidden until expanded
+      html+='<div class="note-body" id="note-body-'+i+'" style="display:none;padding:12px;border-top:1px solid rgba(255,255,255,0.06)">';
+      html+='<div style="font-size:13px;color:var(--white);line-height:1.7;white-space:pre-wrap">'+esc(entry.x||'')+'</div>';
+      html+='<button class="btn btn-danger btn-sm" style="margin-top:10px" onclick="deleteTimestampedNote('+id+','+i+')">&#128465; Delete this note</button>';
+      html+='</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+
+  html+='<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>';
   openModal(html);
 }
 
-function saveClosedNote(id){
-  var note=document.getElementById('note-text').value;
+var _allNotesExpanded = false;
+function toggleNoteEntry(i) {
+  var body = document.getElementById('note-body-'+i);
+  var caret = document.getElementById('note-caret-'+i);
+  var preview = document.getElementById('note-preview-'+i);
+  if(!body) return;
+  if(body.style.display === 'none') {
+    body.style.display = 'block';
+    if(caret) caret.style.transform = 'rotate(90deg)';
+    if(preview) preview.style.whiteSpace = 'normal';
+  } else {
+    body.style.display = 'none';
+    if(caret) caret.style.transform = 'rotate(0deg)';
+    if(preview) preview.style.whiteSpace = 'nowrap';
+  }
+}
+
+function toggleAllNotes() {
+  _allNotesExpanded = !_allNotesExpanded;
+  var bodies = document.querySelectorAll('.note-body');
+  var carets = document.querySelectorAll('.note-caret');
+  var previews = document.querySelectorAll('.note-preview');
+  bodies.forEach(function(b){ b.style.display = _allNotesExpanded ? 'block' : 'none'; });
+  carets.forEach(function(c){ c.style.transform = _allNotesExpanded ? 'rotate(90deg)' : 'rotate(0deg)'; });
+  previews.forEach(function(p){ p.style.whiteSpace = _allNotesExpanded ? 'normal' : 'nowrap'; });
+  var btn = document.getElementById('toggle-all-btn');
+  if(btn) btn.textContent = _allNotesExpanded ? 'Collapse all' : 'Expand all';
+}
+
+function addTimestampedNote(id) {
+  var text = document.getElementById('new-note-text').value.trim();
+  if(!text){ alert('Please type a note first.'); return; }
+  var entries = parseNotes(state.closedNotes[id]);
+  entries.push({t: new Date().toISOString(), x: text});
+  var payload = JSON.stringify(entries);
   setSyncStatus('saving','Saving...');
-  // Check if note already exists
   apiGet('zt_notes','select=*&loan_id=eq.'+id).then(function(rows){
     var promise;
     if(rows&&rows.length>0){
-      promise=apiPatch('zt_notes',rows[0].id,{note:note,updated_at:new Date().toISOString()});
+      promise=apiPatch('zt_notes',rows[0].id,{note:payload,updated_at:new Date().toISOString()});
     } else {
-      promise=apiPost('zt_notes',[{loan_id:id,note:note}]);
+      promise=apiPost('zt_notes',[{loan_id:id,note:payload}]);
     }
     return promise;
   }).then(function(){
-    state.closedNotes[id]=note;
+    state.closedNotes[id]=payload;
     setSyncStatus('saved','Saved \u2713');
-    closeModal();renderClosed();
+    editClosedNote(id); // refresh modal
+    if(currentPage==='closed') renderClosed();
   }).catch(function(e){setSyncStatus('error','Save failed');alert('Error saving note: '+e.message);});
+}
+
+function deleteTimestampedNote(id, idx) {
+  if(!confirm('Delete this note? This cannot be undone.')) return;
+  var entries = parseNotes(state.closedNotes[id]);
+  // The list is shown newest-first, so map display index back to array
+  var sorted = entries.slice().sort(function(a,b){ return (b.t||'') > (a.t||'') ? 1 : -1; });
+  var target = sorted[idx];
+  var realIdx = entries.indexOf(target);
+  if(realIdx>=0) entries.splice(realIdx,1);
+  var payload = JSON.stringify(entries);
+  setSyncStatus('saving','Saving...');
+  apiGet('zt_notes','select=*&loan_id=eq.'+id).then(function(rows){
+    var promise;
+    if(rows&&rows.length>0){
+      promise=apiPatch('zt_notes',rows[0].id,{note:payload,updated_at:new Date().toISOString()});
+    } else {
+      promise=apiPost('zt_notes',[{loan_id:id,note:payload}]);
+    }
+    return promise;
+  }).then(function(){
+    state.closedNotes[id]=payload;
+    setSyncStatus('saved','Saved \u2713');
+    editClosedNote(id);
+    if(currentPage==='closed') renderClosed();
+  }).catch(function(e){setSyncStatus('error','Save failed');alert('Error: '+e.message);});
 }
 
 // ── EARNINGS ─────────────────────────────────
@@ -1563,7 +1706,15 @@ function openLoanDetail(id){
   html+='<div><div style="color:var(--muted);font-size:11px">LINKED</div><div>'+esc(l.loans_linked||'\u2014')+'</div></div>';
   html+='</div>';
   if(l.notes) html+='<div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:12px;font-size:13px;color:var(--muted);margin-bottom:12px"><strong style="color:var(--white)">Notes:</strong> '+esc(l.notes)+'</div>';
-  if(state.closedNotes[l.id]) html+='<div style="background:rgba(42,157,143,0.08);border:1px solid rgba(42,157,143,0.2);border-radius:8px;padding:12px;font-size:13px;color:var(--teal-light);margin-bottom:12px"><strong>File Notes:</strong> '+esc(state.closedNotes[l.id])+'</div>';
+  var detailNotes = parseNotes(state.closedNotes[l.id]);
+  if(detailNotes.length){
+    var latest = detailNotes.slice().sort(function(a,b){return (b.t||'')>(a.t||'')?1:-1;})[0];
+    var lprev = (latest.x||'').replace(/\n/g,' ');
+    if(lprev.length>140) lprev=lprev.slice(0,140)+'...';
+    html+='<div style="background:rgba(42,157,143,0.08);border:1px solid rgba(42,157,143,0.2);border-radius:8px;padding:12px;font-size:13px;color:var(--teal-light);margin-bottom:12px;cursor:pointer" onclick="closeModal();editClosedNote('+l.id+')">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong>File Notes ('+detailNotes.length+')</strong><span style="font-size:11px;color:var(--gold);font-family:\'JetBrains Mono\',monospace">'+fmtNoteTime(latest.t)+'</span></div>';
+    html+='<div style="color:var(--muted)">'+esc(lprev)+(detailNotes.length>1?' <span style="color:var(--teal-light)">+'+(detailNotes.length-1)+' more &rarr;</span>':'')+'</div></div>';
+  }
   html+='<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button>';
   if(canChecklist) html+='<button class="btn btn-teal" onclick="closeModal();openChecklist('+l.id+')">&#x1F9F9; Closing Checklist</button>';
   html+='<button class="btn btn-outline" onclick="closeModal();editClosedNote('+l.id+')">&#9998; File Notes</button><button class="btn btn-gold" onclick="closeModal();openEditLoan('+l.id+')">&#9998; Edit</button></div>';
@@ -1816,15 +1967,16 @@ function saveCleanedDate(id) {
     }
     // Clear memory too
     checklistState[id] = {};
-    // Save final notes to closed file notes if present
+    // Save final notes as a timestamped entry if present
     if(finalNotes && finalNotes.trim()) {
-      var existing = state.closedNotes[id]||'';
-      var combined = existing ? existing+'\n\n[Closing checklist notes] '+finalNotes : '[Closing checklist notes] '+finalNotes;
+      var entries = parseNotes(state.closedNotes[id]);
+      entries.push({t: new Date().toISOString(), x: '[Closing checklist] ' + finalNotes});
+      var payload = JSON.stringify(entries);
       apiGet('zt_notes','select=*&loan_id=eq.'+id).then(function(rows){
         var promise = rows&&rows.length>0
-          ? apiPatch('zt_notes',rows[0].id,{note:combined,updated_at:new Date().toISOString()})
-          : apiPost('zt_notes',[{loan_id:id,note:combined}]);
-        promise.then(function(){state.closedNotes[id]=combined;});
+          ? apiPatch('zt_notes',rows[0].id,{note:payload,updated_at:new Date().toISOString()})
+          : apiPost('zt_notes',[{loan_id:id,note:payload}]);
+        promise.then(function(){state.closedNotes[id]=payload;});
       });
     }
     setSyncStatus('saved','Marked cleaned \u2713');
