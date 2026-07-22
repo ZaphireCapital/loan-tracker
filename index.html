@@ -740,11 +740,103 @@ function showMonthDetail(mi){
 }
 
 // ── LOANS PAGE ───────────────────────────────
+// ── PIPELINE CALENDAR (two stacked months) ───
+function renderPipelineCalendar(pipeline, today) {
+  var MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  // Build event map: 'YYYY-M-D' -> [{type:'close'|'fund', name, id}]
+  var events = {};
+  function addEvent(dateStr, type, l) {
+    if(!dateStr) return;
+    var d = new Date(dateStr+'T12:00:00');
+    var key = d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
+    if(!events[key]) events[key]=[];
+    events[key].push({type:type, name:l.borrower.split(/[\/,&]/)[0].trim(), id:l.id});
+  }
+  pipeline.forEach(function(l){
+    addEvent(l.expected_close_date,'close',l);
+    addEvent(l.expected_fund_date,'fund',l);
+  });
+
+  function buildMonth(year, month) {
+    var first = new Date(year, month, 1);
+    var startDay = first.getDay();
+    var daysInMonth = new Date(year, month+1, 0).getDate();
+    var h = '<div style="flex:1">';
+    h += '<div style="font-size:11px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;font-weight:600">'+MN[month]+' '+year+'</div>';
+    h += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">';
+    DOW.forEach(function(d){ h+='<div style="font-size:9px;color:var(--muted);text-align:center;padding:2px 0;text-transform:uppercase">'+d+'</div>'; });
+    for(var i=0;i<startDay;i++) h+='<div></div>';
+    for(var day=1;day<=daysInMonth;day++){
+      var key = year+'-'+month+'-'+day;
+      var evs = events[key]||[];
+      var isToday = (year===today.getFullYear()&&month===today.getMonth()&&day===today.getDate());
+      var hasClose = evs.some(function(e){return e.type==='close';});
+      var hasFund = evs.some(function(e){return e.type==='fund';});
+      var bg='transparent', bc='rgba(255,255,255,0.05)', tc='var(--muted)';
+      if(hasClose){bg='rgba(201,168,76,0.15)';bc='rgba(201,168,76,0.4)';tc='var(--gold-light)';}
+      else if(hasFund){bg='rgba(42,157,143,0.15)';bc='rgba(42,157,143,0.4)';tc='var(--teal-light)';}
+      var todayRing = isToday ? ';box-shadow:0 0 0 1.5px var(--white) inset' : '';
+      var clickable = evs.length ? ' cursor:pointer' : '';
+      var onclick = evs.length ? ' onclick="openLoanDetail('+evs[0].id+')"' : '';
+      h += '<div'+onclick+' style="min-height:44px;border:1px solid '+bc+';background:'+bg+';border-radius:5px;padding:3px 4px;position:relative;overflow:hidden'+todayRing+clickable+'" title="'+evs.map(function(e){return e.name+' ('+e.type+')';}).join(', ')+'">';
+      h += '<div style="font-size:10px;color:'+tc+';font-weight:'+(isToday?'700':'400')+'">'+day+'</div>';
+      evs.slice(0,2).forEach(function(e){
+        var col = e.type==='close'?'var(--gold-light)':'var(--teal-light)';
+        h += '<div style="font-size:8px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3">'+esc(e.name)+'</div>';
+      });
+      if(evs.length>2) h += '<div style="font-size:8px;color:var(--muted)">+'+(evs.length-2)+'</div>';
+      h += '</div>';
+    }
+    h += '</div></div>';
+    return h;
+  }
+
+  var m1 = today.getMonth(), y1 = today.getFullYear();
+  var m2 = m1===11?0:m1+1, y2 = m1===11?y1+1:y1;
+
+  var html = '<div class="card" style="margin-bottom:20px">';
+  html += '<div class="card-header"><div><div class="card-title">&#128197; Closing Calendar</div><div class="card-sub">Expected closings and funding dates</div></div>';
+  html += '<div style="display:flex;gap:14px;font-size:10px;color:var(--muted)"><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:var(--gold);display:inline-block"></span>Close</span><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:var(--teal);display:inline-block"></span>Funding</span></div></div>';
+  html += '<div style="display:flex;flex-direction:column;gap:18px">';
+  html += buildMonth(y1, m1);
+  html += buildMonth(y2, m2);
+  html += '</div></div>';
+  return html;
+}
+
 function renderLoans(){
   var el=document.getElementById('content');
   var today=new Date();today.setHours(0,0,0,0);
   var pipeline=state.loans.filter(function(l){return l.status==='Active'||l.status==='Pending';}).slice().sort(function(a,b){return (a.expected_close_date||'9999')>(b.expected_close_date||'9999')?1:-1;});
   var html='';
+
+  // ── Deric expected compensation banner ──
+  var pipeDericTotal = 0, pipeDeric30 = 0;
+  pipeline.forEach(function(l){
+    var estGross=(+(l.loan_amount||0))*(+(l.company_comp_pct||2.5))/100;
+    var estDeric=estGross*(+(l.deric_pct||32.5))/100;
+    pipeDericTotal += estDeric;
+    if(l.expected_close_date){
+      var d=new Date(l.expected_close_date+'T12:00:00');
+      var days=Math.round((d-today)/86400000);
+      if(days>=0 && days<=30) pipeDeric30 += estDeric;
+    }
+  });
+  if(pipeline.length){
+    html+='<div class="card" style="margin-bottom:20px;border-color:rgba(201,168,76,0.35)">';
+    html+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><span style="font-size:22px">&#128176;</span><div><div class="card-title">My Expected Compensation</div><div class="card-sub">Estimated Deric payout from the current pipeline</div></div></div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">';
+    html+='<div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.3);border-radius:12px;padding:16px;text-align:center;position:relative;overflow:hidden"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold)"></div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Pipeline Total</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:24px;color:var(--gold);font-weight:500">'+fmtDollar(pipeDericTotal)+'</div><div style="font-size:11px;color:var(--muted);margin-top:4px">'+pipeline.length+' loan'+(pipeline.length!==1?'s':'')+'</div></div>';
+    html+='<div style="background:rgba(42,157,143,0.08);border:1px solid rgba(42,157,143,0.25);border-radius:12px;padding:16px;text-align:center;position:relative;overflow:hidden"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--teal)"></div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Next 30 Days</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:24px;color:var(--teal-light);font-weight:500">'+fmtDollar(pipeDeric30)+'</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Expected to close soon</div></div>';
+    var avgDeric = pipeline.length ? pipeDericTotal/pipeline.length : 0;
+    html+='<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center;position:relative;overflow:hidden"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--muted)"></div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Avg Per Loan</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:24px;color:var(--white);font-weight:500">'+fmtDollar(avgDeric)+'</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Across pipeline</div></div>';
+    html+='</div></div>';
+
+    // ── Stacked two-month calendar ──
+    html+=renderPipelineCalendar(pipeline, today);
+  }
 
   if(pipeline.length){
     html+='<div class="card" style="margin-bottom:20px">';
