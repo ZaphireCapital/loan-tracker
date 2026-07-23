@@ -621,6 +621,7 @@ function showPage(page) {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button>';
   }
   document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
+  if(page==='loans') _calMonthOffset = 0; // reset calendar to current month on fresh load
   var renders = {
     dashboard:renderDashboard, loans:renderLoans, closed:renderClosed,
     earnings:renderEarnings, settings:renderSettings, trash:renderTrash, dates:renderDates,
@@ -745,12 +746,23 @@ function showMonthDetail(mi){
 // ── LOANS PAGE ───────────────────────────────
 // ── PIPELINE CALENDAR (two stacked months) ───
 var _calendarEvents = {}; // shared so day popover can read it
+var _calMonthOffset = 0;  // 0 = current month, +1 = next, -1 = previous
+
+function shiftCalendar(delta) {
+  _calMonthOffset += delta;
+  var container = document.getElementById('pipeline-calendar-wrap');
+  if(container) {
+    var pipeline = state.loans.filter(function(l){return l.status==='Active'||l.status==='Pending';});
+    var today = new Date(); today.setHours(0,0,0,0);
+    container.outerHTML = renderPipelineCalendar(pipeline, today);
+  }
+}
 
 function renderPipelineCalendar(pipeline, today) {
   var MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  // Build event map: 'YYYY-M-D' -> [{type, name, id, loan}]
+  // Build event map from ALL loans (not just pipeline) so past closings show too
   _calendarEvents = {};
   function addEvent(dateStr, type, l) {
     if(!dateStr) return;
@@ -759,9 +771,12 @@ function renderPipelineCalendar(pipeline, today) {
     if(!_calendarEvents[key]) _calendarEvents[key]=[];
     _calendarEvents[key].push({type:type, name:l.borrower.split(/[\/,&(]/)[0].trim(), id:l.id});
   }
-  pipeline.forEach(function(l){
+  // Include all loans so you can look back at closed ones and forward at pipeline
+  state.loans.forEach(function(l){
     addEvent(l.expected_close_date,'close',l);
     addEvent(l.expected_fund_date,'fund',l);
+    // Also plot actual closing dates for closed files
+    if(l.status==='Closed' && l.closing_date) addEvent(l.closing_date,'close',l);
   });
 
   function buildMonth(year, month) {
@@ -805,12 +820,22 @@ function renderPipelineCalendar(pipeline, today) {
     return h;
   }
 
-  var m1 = today.getMonth(), y1 = today.getFullYear();
+  // Apply the offset to determine which two months to show
+  var base = new Date(today.getFullYear(), today.getMonth()+_calMonthOffset, 1);
+  var m1 = base.getMonth(), y1 = base.getFullYear();
   var m2 = m1===11?0:m1+1, y2 = m1===11?y1+1:y1;
 
-  var html = '<div class="card" style="margin-bottom:0">';
-  html += '<div class="card-header" style="margin-bottom:12px"><div><div class="card-title">&#128197; Closing Calendar</div></div>';
-  html += '<div style="display:flex;gap:10px;font-size:9px;color:var(--muted)"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--gold);display:inline-block"></span>Close</span><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--teal);display:inline-block"></span>Fund</span></div></div>';
+  var html = '<div class="card" id="pipeline-calendar-wrap" style="margin-bottom:0">';
+  html += '<div class="card-header" style="margin-bottom:12px;align-items:center">';
+  html += '<div style="display:flex;align-items:center;gap:8px">';
+  html += '<button onclick="shiftCalendar(-1)" title="Previous month" style="background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--white);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center">&#9650;</button>';
+  html += '<button onclick="shiftCalendar(1)" title="Next month" style="background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--white);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center">&#9660;</button>';
+  html += '<div><div class="card-title" style="margin-bottom:0">&#128197; Closing Calendar</div></div>';
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:10px">';
+  if(_calMonthOffset!==0) html += '<button onclick="_calMonthOffset=0;shiftCalendar(0)" style="background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);color:var(--gold);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:10px">Today</button>';
+  html += '<div style="display:flex;gap:10px;font-size:9px;color:var(--muted)"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--gold);display:inline-block"></span>Close</span><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--teal);display:inline-block"></span>Fund</span></div>';
+  html += '</div></div>';
   html += '<div style="display:flex;flex-direction:column;gap:16px">';
   html += buildMonth(y1, m1);
   html += buildMonth(y2, m2);
@@ -847,6 +872,20 @@ function showDayLoans(key, dateLabel) {
   openModal(html);
 }
 
+
+// Search handler that preserves input focus across re-render
+var _searchDebounce = null;
+function handleLoanSearch(val) {
+  loanFilter.search = val;
+  renderLoans();
+  // Restore focus and cursor to the search box after re-render
+  var input = document.getElementById('loan-search-input');
+  if(input) {
+    input.focus();
+    var len = input.value.length;
+    try { input.setSelectionRange(len, len); } catch(e) {}
+  }
+}
 
 function renderLoans(){
   var el=document.getElementById('content');
@@ -947,7 +986,7 @@ function renderLoans(){
   }).length;
 
   html+='<div class="search-row">';
-  html+='<input type="text" placeholder="Search borrower..." value="'+esc(loanFilter.search)+'" oninput="loanFilter.search=this.value;renderLoans()" style="max-width:240px">';
+  html+='<input type="text" id="loan-search-input" placeholder="Search borrower..." value="'+esc(loanFilter.search)+'" oninput="handleLoanSearch(this.value)" style="max-width:240px">';
   html+='<select onchange="loanFilter.status=this.value;renderLoans()"><option value="">All Statuses</option>';
   state.settings.loanStatuses.forEach(function(s){html+='<option value="'+esc(s)+'"'+(loanFilter.status===s?' selected':'')+'>'+esc(s)+'</option>';});
   html+='</select><select onchange="loanFilter.type=this.value;renderLoans()"><option value="">All Types</option>';
@@ -959,7 +998,7 @@ function renderLoans(){
   html+='<option value="needs"'+(loanFilter.cleaned==='needs'?' selected':'')+'>&#x1F9F9; Needs Cleaning'+(needsCleaningCount?' ('+needsCleaningCount+')':'')+'</option>';
   html+='<option value="done"'+(loanFilter.cleaned==='done'?' selected':'')+'>&#10003; Cleaned &amp; Closed</option>';
   html+='</select>';
-  html+='<span style="color:var(--muted);font-size:13px">'+allLoans.length+' loan'+(allLoans.length!==1?'s':'')+'</span></div>';
+  html+='<span id="loan-count-label" style="color:var(--muted);font-size:13px">'+allLoans.length+' loan'+(allLoans.length!==1?'s':'')+'</span></div>';
 
   // Needs-cleaning alert banner
   if(needsCleaningCount && loanFilter.cleaned !== 'needs') {
