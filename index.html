@@ -747,9 +747,21 @@ function showMonthDetail(mi){
 // ── PIPELINE CALENDAR (two stacked months) ───
 var _calendarEvents = {}; // shared so day popover can read it
 var _calMonthOffset = 0;  // 0 = current month, +1 = next, -1 = previous
+var _calShowClose = true; // toggle: show expected/actual closings
+var _calShowFund = true;  // toggle: show expected funding
 
 function shiftCalendar(delta) {
   _calMonthOffset += delta;
+  redrawCalendar();
+}
+
+function toggleCalType(type) {
+  if(type==='close') _calShowClose = !_calShowClose;
+  else if(type==='fund') _calShowFund = !_calShowFund;
+  redrawCalendar();
+}
+
+function redrawCalendar() {
   var container = document.getElementById('pipeline-calendar-wrap');
   if(container) {
     var pipeline = state.loans.filter(function(l){return l.status==='Active'||l.status==='Pending';});
@@ -762,20 +774,20 @@ function renderPipelineCalendar(pipeline, today) {
   var MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  // Build event map from ALL loans (not just pipeline) so past closings show too
+  // Build event map from ALL loans, respecting the show/hide toggles
   _calendarEvents = {};
   function addEvent(dateStr, type, l) {
     if(!dateStr) return;
+    if(type==='close' && !_calShowClose) return;
+    if(type==='fund' && !_calShowFund) return;
     var d = new Date(dateStr+'T12:00:00');
     var key = d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
     if(!_calendarEvents[key]) _calendarEvents[key]=[];
     _calendarEvents[key].push({type:type, name:l.borrower.split(/[\/,&(]/)[0].trim(), id:l.id});
   }
-  // Include all loans so you can look back at closed ones and forward at pipeline
   state.loans.forEach(function(l){
     addEvent(l.expected_close_date,'close',l);
     addEvent(l.expected_fund_date,'fund',l);
-    // Also plot actual closing dates for closed files
     if(l.status==='Closed' && l.closing_date) addEvent(l.closing_date,'close',l);
   });
 
@@ -832,9 +844,13 @@ function renderPipelineCalendar(pipeline, today) {
   html += '<button onclick="shiftCalendar(1)" title="Next month" style="background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--white);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center">&#9660;</button>';
   html += '<div><div class="card-title" style="margin-bottom:0">&#128197; Closing Calendar</div></div>';
   html += '</div>';
-  html += '<div style="display:flex;align-items:center;gap:10px">';
-  if(_calMonthOffset!==0) html += '<button onclick="_calMonthOffset=0;shiftCalendar(0)" style="background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);color:var(--gold);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:10px">Today</button>';
-  html += '<div style="display:flex;gap:10px;font-size:9px;color:var(--muted)"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--gold);display:inline-block"></span>Close</span><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--teal);display:inline-block"></span>Fund</span></div>';
+  html += '<div style="display:flex;align-items:center;gap:8px">';
+  if(_calMonthOffset!==0) html += '<button onclick="_calMonthOffset=0;redrawCalendar()" style="background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);color:var(--gold);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:10px">Today</button>';
+  // Clickable toggles
+  var closeOn = _calShowClose;
+  var fundOn = _calShowFund;
+  html += '<button onclick="toggleCalType(\'close\')" title="Show/hide closings" style="display:inline-flex;align-items:center;gap:5px;background:'+(closeOn?'rgba(201,168,76,0.18)':'rgba(255,255,255,0.03)')+';border:1px solid '+(closeOn?'rgba(201,168,76,0.5)':'var(--border)')+';border-radius:6px;padding:4px 10px;cursor:pointer;font-size:10px;color:'+(closeOn?'var(--gold-light)':'var(--muted)')+';opacity:'+(closeOn?'1':'0.55')+'"><span style="width:8px;height:8px;border-radius:2px;background:var(--gold);display:inline-block"></span>Close</button>';
+  html += '<button onclick="toggleCalType(\'fund\')" title="Show/hide funding" style="display:inline-flex;align-items:center;gap:5px;background:'+(fundOn?'rgba(42,157,143,0.18)':'rgba(255,255,255,0.03)')+';border:1px solid '+(fundOn?'rgba(42,157,143,0.5)':'var(--border)')+';border-radius:6px;padding:4px 10px;cursor:pointer;font-size:10px;color:'+(fundOn?'var(--teal-light)':'var(--muted)')+';opacity:'+(fundOn?'1':'0.55')+'"><span style="width:8px;height:8px;border-radius:2px;background:var(--teal);display:inline-block"></span>Fund</button>';
   html += '</div></div>';
   html += '<div style="display:flex;flex-direction:column;gap:16px">';
   html += buildMonth(y1, m1);
