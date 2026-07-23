@@ -143,6 +143,9 @@ textarea{resize:vertical;min-height:80px;}
 .badge-zc-pill{background:rgba(201,168,76,0.15);color:var(--gold);border:1px solid rgba(201,168,76,0.3);display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;}
 .badge-paid{background:rgba(45,198,83,0.15);color:var(--green);border:1px solid rgba(45,198,83,0.3);display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;}
 .badge-unpaid{background:rgba(201,168,76,0.15);color:var(--gold);border:1px solid rgba(201,168,76,0.3);display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;}
+@media (max-width:1100px){
+  .pipeline-cal-grid{grid-template-columns:1fr!important;}
+}
 @media print{
   #sidebar,.topbar,.topbar-actions,.btn,.modal-overlay{display:none!important;}
   body{background:white;color:black;}
@@ -741,18 +744,20 @@ function showMonthDetail(mi){
 
 // ── LOANS PAGE ───────────────────────────────
 // ── PIPELINE CALENDAR (two stacked months) ───
+var _calendarEvents = {}; // shared so day popover can read it
+
 function renderPipelineCalendar(pipeline, today) {
   var MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  // Build event map: 'YYYY-M-D' -> [{type:'close'|'fund', name, id}]
-  var events = {};
+  // Build event map: 'YYYY-M-D' -> [{type, name, id, loan}]
+  _calendarEvents = {};
   function addEvent(dateStr, type, l) {
     if(!dateStr) return;
     var d = new Date(dateStr+'T12:00:00');
     var key = d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
-    if(!events[key]) events[key]=[];
-    events[key].push({type:type, name:l.borrower.split(/[\/,&]/)[0].trim(), id:l.id});
+    if(!_calendarEvents[key]) _calendarEvents[key]=[];
+    _calendarEvents[key].push({type:type, name:l.borrower.split(/[\/,&(]/)[0].trim(), id:l.id});
   }
   pipeline.forEach(function(l){
     addEvent(l.expected_close_date,'close',l);
@@ -763,30 +768,37 @@ function renderPipelineCalendar(pipeline, today) {
     var first = new Date(year, month, 1);
     var startDay = first.getDay();
     var daysInMonth = new Date(year, month+1, 0).getDate();
-    var h = '<div style="flex:1">';
+    var h = '<div>';
     h += '<div style="font-size:11px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;font-weight:600">'+MN[month]+' '+year+'</div>';
     h += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">';
-    DOW.forEach(function(d){ h+='<div style="font-size:9px;color:var(--muted);text-align:center;padding:2px 0;text-transform:uppercase">'+d+'</div>'; });
+    DOW.forEach(function(d){ h+='<div style="font-size:9px;color:var(--muted);text-align:center;padding:2px 0;text-transform:uppercase">'+d.charAt(0)+'</div>'; });
     for(var i=0;i<startDay;i++) h+='<div></div>';
     for(var day=1;day<=daysInMonth;day++){
       var key = year+'-'+month+'-'+day;
-      var evs = events[key]||[];
+      var evs = _calendarEvents[key]||[];
       var isToday = (year===today.getFullYear()&&month===today.getMonth()&&day===today.getDate());
       var hasClose = evs.some(function(e){return e.type==='close';});
       var hasFund = evs.some(function(e){return e.type==='fund';});
+      var multi = evs.length>1;
       var bg='transparent', bc='rgba(255,255,255,0.05)', tc='var(--muted)';
       if(hasClose){bg='rgba(201,168,76,0.15)';bc='rgba(201,168,76,0.4)';tc='var(--gold-light)';}
       else if(hasFund){bg='rgba(42,157,143,0.15)';bc='rgba(42,157,143,0.4)';tc='var(--teal-light)';}
+      if(multi){bg='rgba(201,168,76,0.25)';bc='rgba(201,168,76,0.6)';}
       var todayRing = isToday ? ';box-shadow:0 0 0 1.5px var(--white) inset' : '';
-      var clickable = evs.length ? ' cursor:pointer' : '';
-      var onclick = evs.length ? ' onclick="openLoanDetail('+evs[0].id+')"' : '';
+      var clickable = evs.length ? ';cursor:pointer' : '';
+      var onclick = '';
+      if(evs.length===1) onclick=' onclick="openLoanDetail('+evs[0].id+')"';
+      else if(evs.length>1) onclick=' onclick="showDayLoans(\''+key+'\',\''+MN[month]+' '+day+', '+year+'\')"';
       h += '<div'+onclick+' style="min-height:44px;border:1px solid '+bc+';background:'+bg+';border-radius:5px;padding:3px 4px;position:relative;overflow:hidden'+todayRing+clickable+'" title="'+evs.map(function(e){return e.name+' ('+e.type+')';}).join(', ')+'">';
       h += '<div style="font-size:10px;color:'+tc+';font-weight:'+(isToday?'700':'400')+'">'+day+'</div>';
+      if(multi){
+        h += '<div style="position:absolute;top:2px;right:3px;background:var(--gold);color:var(--navy);font-size:8px;font-weight:700;border-radius:8px;padding:0 5px;line-height:1.5">'+evs.length+'</div>';
+      }
       evs.slice(0,2).forEach(function(e){
         var col = e.type==='close'?'var(--gold-light)':'var(--teal-light)';
         h += '<div style="font-size:8px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3">'+esc(e.name)+'</div>';
       });
-      if(evs.length>2) h += '<div style="font-size:8px;color:var(--muted)">+'+(evs.length-2)+'</div>';
+      if(evs.length>2) h += '<div style="font-size:8px;color:var(--muted)">+'+(evs.length-2)+' more</div>';
       h += '</div>';
     }
     h += '</div></div>';
@@ -796,15 +808,45 @@ function renderPipelineCalendar(pipeline, today) {
   var m1 = today.getMonth(), y1 = today.getFullYear();
   var m2 = m1===11?0:m1+1, y2 = m1===11?y1+1:y1;
 
-  var html = '<div class="card" style="margin-bottom:20px">';
-  html += '<div class="card-header"><div><div class="card-title">&#128197; Closing Calendar</div><div class="card-sub">Expected closings and funding dates</div></div>';
-  html += '<div style="display:flex;gap:14px;font-size:10px;color:var(--muted)"><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:var(--gold);display:inline-block"></span>Close</span><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:var(--teal);display:inline-block"></span>Funding</span></div></div>';
-  html += '<div style="display:flex;flex-direction:column;gap:18px">';
+  var html = '<div class="card" style="margin-bottom:0">';
+  html += '<div class="card-header" style="margin-bottom:12px"><div><div class="card-title">&#128197; Closing Calendar</div></div>';
+  html += '<div style="display:flex;gap:10px;font-size:9px;color:var(--muted)"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--gold);display:inline-block"></span>Close</span><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--teal);display:inline-block"></span>Fund</span></div></div>';
+  html += '<div style="display:flex;flex-direction:column;gap:16px">';
   html += buildMonth(y1, m1);
   html += buildMonth(y2, m2);
   html += '</div></div>';
   return html;
 }
+
+// Popover showing all loans on a given day
+function showDayLoans(key, dateLabel) {
+  var evs = _calendarEvents[key]||[];
+  var today = new Date(); today.setHours(0,0,0,0);
+  var html = '<div class="modal-title">&#128197; '+esc(dateLabel)+'</div>';
+  html += '<div class="modal-sub">'+evs.length+' item'+(evs.length!==1?'s':'')+' scheduled this day</div>';
+  var dayTotal = 0;
+  evs.forEach(function(e){
+    var l = state.loans.find(function(x){return x.id===e.id;});
+    if(!l) return;
+    var estGross=(+(l.loan_amount||0))*(+(l.company_comp_pct||2.5))/100;
+    var estDeric=estGross*(+(l.deric_pct||32.5))/100;
+    if(e.type==='close') dayTotal += estDeric;
+    var tagBg = e.type==='close' ? 'rgba(201,168,76,0.2)' : 'rgba(42,157,143,0.2)';
+    var tagCol = e.type==='close' ? 'var(--gold-light)' : 'var(--teal-light)';
+    var tagTxt = e.type==='close' ? 'Close' : 'Funding';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer" onclick="closeModal();openLoanDetail('+l.id+')">';
+    html += '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;color:var(--white)">'+esc(l.borrower)+' <span style="font-size:9px;padding:1px 7px;border-radius:10px;background:'+tagBg+';color:'+tagCol+';margin-left:4px">'+tagTxt+'</span></div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+'</div></div>';
+    html += '<div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;color:var(--gold);flex-shrink:0">'+fmtDollar(estDeric)+'</div>';
+    html += '</div>';
+  });
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;margin-top:4px">';
+  html += '<span style="font-size:12px;color:var(--muted)">Day total (closings)</span>';
+  html += '<span style="font-family:\'JetBrains Mono\',monospace;font-size:16px;color:var(--gold);font-weight:600">'+fmtDollar(dayTotal)+'</span></div>';
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>';
+  openModal(html);
+}
+
 
 function renderLoans(){
   var el=document.getElementById('content');
@@ -834,33 +876,34 @@ function renderLoans(){
     html+='<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center;position:relative;overflow:hidden"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--muted)"></div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Avg Per Loan</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:24px;color:var(--white);font-weight:500">'+fmtDollar(avgDeric)+'</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Across pipeline</div></div>';
     html+='</div></div>';
 
-    // ── Stacked two-month calendar ──
-    html+=renderPipelineCalendar(pipeline, today);
-  }
+    // ── Side-by-side: condensed pipeline + calendar ──
+    html+='<div class="pipeline-cal-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">';
 
-  if(pipeline.length){
-    html+='<div class="card" style="margin-bottom:20px">';
-    html+='<div class="card-header"><div><div class="card-title">&#128197; Upcoming Pipeline</div><div class="card-sub">Sorted by expected closing date</div></div><div style="font-size:12px;color:var(--muted)">'+pipeline.length+' loan'+(pipeline.length!==1?'s':'')+' in pipeline</div></div>';
+    // LEFT: condensed pipeline list
+    html+='<div class="card" style="margin-bottom:0">';
+    html+='<div class="card-header" style="margin-bottom:12px"><div><div class="card-title">&#128197; Upcoming Pipeline</div><div class="card-sub">Sorted by expected close</div></div><div style="font-size:11px;color:var(--muted)">'+pipeline.length+'</div></div>';
+    html+='<div style="max-height:520px;overflow-y:auto;margin:-4px -4px 0;padding:4px">';
     pipeline.forEach(function(l){
-      var days=null,fddays=null;
+      var days=null;
       if(l.expected_close_date){var d=new Date(l.expected_close_date+'T12:00:00');days=Math.round((d-today)/86400000);}
-      if(l.expected_fund_date){var d2=new Date(l.expected_fund_date+'T12:00:00');fddays=Math.round((d2-today)/86400000);}
       var uc=days===null?'var(--muted)':days<0?'var(--red)':days<=7?'var(--red)':days<=14?'#f4a261':days<=30?'var(--gold)':'var(--green)';
-      var ul=days===null?'No date set':days<0?Math.abs(days)+'d overdue':days+'d away';
-      var fc=fddays===null?'var(--muted)':fddays<0?'var(--red)':fddays<=7?'var(--red)':fddays<=14?'#f4a261':fddays<=30?'var(--gold)':'var(--green)';
-      var fl=fddays===null?'No date set':fddays<0?Math.abs(fddays)+'d overdue':fddays+'d away';
+      var ul=days===null?'No date':days<0?Math.abs(days)+'d over':days===0?'today':days+'d';
       var estGross=(+(l.loan_amount||0))*(+(l.company_comp_pct||2.5))/100;
       var estDeric=estGross*(+(l.deric_pct||32.5))/100;
-      html+='<div style="border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+uc+';border-radius:10px;padding:16px 18px;margin-bottom:10px;display:grid;grid-template-columns:1fr auto;gap:12px;cursor:pointer" onclick="openLoanDetail('+l.id+')">';
-      html+='<div><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap"><strong style="font-size:14px">'+esc(l.borrower)+'</strong>'+badge(l.status)+'<span style="font-size:12px;color:var(--muted)">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+'</span></div>';
-      html+='<div style="display:flex;gap:24px;flex-wrap:wrap">';
-      html+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px">Exp. Close</div><div style="font-size:13px;color:'+uc+';font-weight:500">'+(l.expected_close_date?fmtDate(l.expected_close_date):'&mdash;')+(days!==null?' <span style="font-size:11px;opacity:0.8">('+ul+')</span>':'')+'</div></div>';
-      html+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px">Exp. Funding</div><div style="font-size:13px;color:'+fc+';font-weight:500">'+(l.expected_fund_date?fmtDate(l.expected_fund_date):'&mdash;')+(fddays!==null?' <span style="font-size:11px;opacity:0.8">('+fl+')</span>':'')+'</div></div>';
-      if(l.pipeline_notes) html+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px">Notes</div><div style="font-size:12px;color:var(--muted)">'+esc(l.pipeline_notes)+'</div></div>';
-      html+='</div></div>';
-      html+='<div style="text-align:right;flex-shrink:0"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">Est. Deric</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:16px;color:var(--gold);font-weight:600">'+fmtDollar(estDeric)+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">'+(l.company_comp_pct||2.5)+'% comp</div></div>';
+      html+='<div style="border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+uc+';border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px" onclick="openLoanDetail('+l.id+')">';
+      html+='<div style="min-width:0;flex:1">';
+      html+='<div style="font-size:13px;font-weight:500;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.borrower)+'</div>';
+      html+='<div style="font-size:10px;color:var(--muted);margin-top:2px">'+esc(l.type)+' &middot; '+fmtDollar(l.loan_amount)+'</div>';
+      html+='<div style="font-size:10px;margin-top:3px"><span style="color:'+uc+'">'+(l.expected_close_date?fmtDate(l.expected_close_date):'No date')+' ('+ul+')</span></div>';
+      html+='</div>';
+      html+='<div style="text-align:right;flex-shrink:0"><div style="font-family:\'JetBrains Mono\',monospace;font-size:14px;color:var(--gold);font-weight:600">'+fmtDollar(estDeric)+'</div><div style="font-size:9px;color:var(--muted)">est. Deric</div></div>';
       html+='</div>';
     });
+    html+='</div></div>';
+
+    // RIGHT: calendar
+    html+=renderPipelineCalendar(pipeline, today);
+
     html+='</div>';
   }
 
