@@ -138,6 +138,11 @@ textarea{resize:vertical;min-height:80px;}
 .co-btn{flex:1;padding:7px 4px;font-size:10px;font-weight:600;text-align:center;cursor:pointer;transition:all 0.15s;letter-spacing:0.04em;border:none;background:transparent;color:var(--muted);}
 .co-btn.zc-active{background:var(--gold);color:var(--navy);}
 .co-btn.jdz-active-btn{background:var(--jdz);color:var(--white);}
+.co-btn.me-active-btn{background:#8b5cf6;color:var(--white);}
+:root{--me:#8b5cf6;--me-light:#a78bfa;--me-dim:#6d28d9;--me-border:rgba(139,92,246,0.25);}
+.me-active{color:#a78bfa!important;border-left-color:#8b5cf6!important;background:rgba(139,92,246,0.08)!important;}
+.me-label{color:#a78bfa!important;}
+.badge-me{background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;}
 /* ── JDZ badges ── */
 .badge-jdz{background:rgba(29,158,117,0.15);color:var(--jdz);border:1px solid rgba(29,158,117,0.3);display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;}
 .badge-zc-pill{background:rgba(201,168,76,0.15);color:var(--gold);border:1px solid rgba(201,168,76,0.3);display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;}
@@ -179,6 +184,7 @@ textarea{resize:vertical;min-height:80px;}
     <div class="co-switcher">
       <button class="co-btn zc-active" id="btn-zc" onclick="switchCompany('zc')">ZAPHIRE</button>
       <button class="co-btn" id="btn-jdz" onclick="switchCompany('jdz')">JDZ</button>
+      <button class="co-btn" id="btn-me" onclick="switchCompany('me')">ME</button>
     </div>
     <!-- ZC nav -->
     <div id="nav-zc-section">
@@ -212,6 +218,19 @@ textarea{resize:vertical;min-height:80px;}
         <div class="nav-item" id="nav-jdz-earnings" onclick="showPage('earnings')"><span class="icon">💰</span> Earnings</div>
         <div class="nav-item" id="nav-jdz-settings" onclick="showPage('jdz-settings')"><span class="icon">⚙️</span> JDZ Settings</div>
         <div class="nav-item" id="nav-jdz-trash" onclick="showPage('jdz-trash')"><span class="icon">🗑️</span> Trash <span id="jdz-trash-count" style="margin-left:auto;background:rgba(230,57,70,0.2);color:var(--red);border-radius:10px;padding:1px 7px;font-size:10px;display:none"></span></div>
+      </div>
+    </div>
+    <!-- Personal nav -->
+    <div id="nav-me-section" style="display:none">
+      <div class="nav-section">
+        <div class="nav-label me-label">Personal</div>
+        <div class="nav-item" id="nav-me-dashboard" onclick="showPage('me-dashboard')"><span class="icon">📊</span> Dashboard</div>
+        <div class="nav-item" id="nav-me-expenses" onclick="showPage('me-expenses')"><span class="icon">📤</span> Expenses &amp; YTD</div>
+        <div class="nav-item" id="nav-me-reports" onclick="showPage('me-reports')"><span class="icon">📈</span> Reports</div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Tools</div>
+        <div class="nav-item" id="nav-me-settings" onclick="showPage('me-settings')"><span class="icon">⚙️</span> Settings</div>
       </div>
     </div>
     <div class="sidebar-footer">
@@ -280,6 +299,8 @@ var state = {
   datesTrash: [],
   jdzDeals: [],
   jdzTrash: [],
+  meExpenses: [],
+  meVendors: [],
   settings: {
     loanTypes:['Purchase','Refinance','HELOC','FHA','VA','Conventional','Jumbo'],
     loanStatuses:['Active','Pending','Closed','On Hold','Cancelled'],
@@ -409,7 +430,9 @@ function initApp() {
     return Promise.all([
       apiGet('zt_notes', 'select=*').catch(function(){ return []; }),
       apiGet('zt_dates', 'select=*').catch(function(){ return []; }),
-      apiGet('jdz_deals', 'select=*').catch(function(){ return []; })
+      apiGet('jdz_deals', 'select=*').catch(function(){ return []; }),
+      apiGet('me_expenses', 'select=*').catch(function(){ return []; }),
+      apiGet('me_vendors', 'select=*').catch(function(){ return []; })
     ]);
   }).then(function(results) {
     (results[0]||[]).forEach(function(n) { state.closedNotes[n.loan_id] = n.note; });
@@ -419,6 +442,9 @@ function initApp() {
     var allDeals = results[2] || [];
     state.jdzDeals = allDeals.filter(function(d){ return !d.deleted_at; });
     state.jdzTrash = allDeals.filter(function(d){ return !!d.deleted_at; });
+    var allExp = results[3] || [];
+    state.meExpenses = allExp.filter(function(e){ return !e.deleted_at; });
+    state.meVendors = (results[4] || []);
     updateTrashBadge();
     updateDatesBadge();
     updateJdzTrashBadge();
@@ -565,40 +591,52 @@ function switchCompany(co) {
   activeCompany = co;
   var zcBtn = document.getElementById('btn-zc');
   var jdzBtn = document.getElementById('btn-jdz');
+  var meBtn = document.getElementById('btn-me');
   var zcNav = document.getElementById('nav-zc-section');
   var jdzNav = document.getElementById('nav-jdz-section');
+  var meNav = document.getElementById('nav-me-section');
   var logo = document.getElementById('sidebar-wordmark');
   var sub = document.getElementById('sidebar-sub');
+  // reset all
+  zcBtn.className = 'co-btn'; jdzBtn.className = 'co-btn'; meBtn.className = 'co-btn';
+  zcNav.style.display = 'none'; jdzNav.style.display = 'none'; meNav.style.display = 'none';
   if(co === 'zc') {
     zcBtn.className = 'co-btn zc-active';
-    jdzBtn.className = 'co-btn';
     zcNav.style.display = 'block';
-    jdzNav.style.display = 'none';
-    logo.textContent = ''; logo.innerHTML = 'Zaphire<br>Capital';
+    logo.innerHTML = 'Zaphire<br>Capital';
     logo.style.color = 'var(--gold)';
     sub.textContent = 'Loan Tracker Pro';
     showPage('dashboard');
-  } else {
-    zcBtn.className = 'co-btn';
+  } else if(co === 'jdz') {
     jdzBtn.className = 'co-btn jdz-active-btn';
-    zcNav.style.display = 'none';
     jdzNav.style.display = 'block';
-    logo.textContent = ''; logo.innerHTML = 'JDZaphire<br>Logistics';
+    logo.innerHTML = 'JDZaphire<br>Logistics';
     logo.style.color = 'var(--jdz)';
     sub.textContent = 'LLC';
     showPage('jdz-dashboard');
+  } else {
+    meBtn.className = 'co-btn me-active-btn';
+    meNav.style.display = 'block';
+    logo.innerHTML = 'Personal';
+    logo.style.color = 'var(--me)';
+    sub.textContent = 'My Finances';
+    showPage('me-dashboard');
   }
 }
 
 function showPage(page) {
   currentPage = page;
-  var allNavIds = ['dashboard','loans','closed','earnings','settings','trash','dates','jdz-dashboard','jdz-deals','jdz-history','jdz-settings','jdz-trash'];
+  var allNavIds = ['dashboard','loans','closed','earnings','settings','trash','dates','jdz-dashboard','jdz-deals','jdz-history','jdz-settings','jdz-trash','me-dashboard','me-expenses','me-reports','me-settings'];
   allNavIds.forEach(function(p) {
     var el = document.getElementById('nav-' + p);
     if(el) el.className = 'nav-item';
   });
   var activeEl = document.getElementById('nav-' + page);
-  if(activeEl) activeEl.className = page.startsWith('jdz') ? 'nav-item jdz-active' : 'nav-item active';
+  if(activeEl) {
+    if(page.indexOf('jdz')===0) activeEl.className = 'nav-item jdz-active';
+    else if(page.indexOf('me-')===0) activeEl.className = 'nav-item me-active';
+    else activeEl.className = 'nav-item active';
+  }
   if(page==='earnings' && activeCompany==='jdz') {
     var jdzE = document.getElementById('nav-jdz-earnings');
     if(jdzE) jdzE.className = 'nav-item jdz-active';
@@ -607,7 +645,8 @@ function showPage(page) {
     dashboard:'Dashboard', loans:'Active Loans', closed:'Closed Files',
     earnings:'Earnings & Payouts', settings:'Settings', trash:'Trash', dates:'Important Dates',
     'jdz-dashboard':'JDZ Dashboard', 'jdz-deals':'Deals', 'jdz-history':'Deal History',
-    'jdz-settings':'JDZ Settings', 'jdz-trash':'JDZ Trash'
+    'jdz-settings':'JDZ Settings', 'jdz-trash':'JDZ Trash',
+    'me-dashboard':'Personal Dashboard', 'me-expenses':'Expenses & YTD', 'me-reports':'Reports', 'me-settings':'Personal Settings'
   };
   document.getElementById('page-title').textContent = titles[page] || page;
   var acts = document.getElementById('topbar-actions');
@@ -617,6 +656,8 @@ function showPage(page) {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-gold btn-sm" onclick="openAddDate()">+ Add Date</button>';
   } else if(page==='jdz-deals'||page==='jdz-dashboard') {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--jdz);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddDeal()">+ Add Deal</button>';
+  } else if(page==='me-expenses'||page==='me-dashboard') {
+    acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddExpense()">+ Add Expense</button>';
   } else {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button>';
   }
@@ -626,7 +667,9 @@ function showPage(page) {
     dashboard:renderDashboard, loans:renderLoans, closed:renderClosed,
     earnings:renderEarnings, settings:renderSettings, trash:renderTrash, dates:renderDates,
     'jdz-dashboard':renderJdzDashboard, 'jdz-deals':renderJdzDeals,
-    'jdz-history':renderJdzHistory, 'jdz-settings':renderJdzSettings, 'jdz-trash':renderJdzTrash
+    'jdz-history':renderJdzHistory, 'jdz-settings':renderJdzSettings, 'jdz-trash':renderJdzTrash,
+    'me-dashboard':renderMeDashboard, 'me-expenses':renderMeExpenses,
+    'me-reports':renderMeReports, 'me-settings':renderMeSettings
   };
   setTimeout(function() {
     try { (renders[page]||renderDashboard)(); }
@@ -3013,8 +3056,322 @@ function emptyJdzTrash(){
   }).catch(function(e){alert('Error: '+e.message);});
 }
 
-// ── CLOSING CHECKLIST ─────────────────────────
+// ── PERSONAL SECTION ──────────────────────────
 
+var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Compute Deric's YTD income from Zaphire + JDZ
+function computeDericIncome() {
+  var year = new Date().getFullYear();
+  var zc = 0, jdz = 0;
+  state.loans.forEach(function(l){
+    if(l.status==='Closed' && l.closing_date) {
+      var y = new Date(l.closing_date+'T12:00:00').getFullYear();
+      if(y===year) zc += +(l.deric_amount||0);
+    }
+  });
+  (state.jdzDeals||[]).forEach(function(d){
+    if(d.payment_status==='Paid' && d.deal_date) {
+      var y = new Date(d.deal_date+'T12:00:00').getFullYear();
+      if(y===year) jdz += +(d.amount||0);
+    }
+  });
+  return {zc:zc, jdz:jdz, total:zc+jdz};
+}
+
+// Sum expenses for a given vendor across the year, by month
+function vendorMonthlyTotals(vendorName) {
+  var year = new Date().getFullYear();
+  var months = [0,0,0,0,0,0,0,0,0,0,0,0];
+  state.meExpenses.forEach(function(e){
+    if(e.vendor===vendorName && e.date) {
+      var d = new Date(e.date+'T12:00:00');
+      if(d.getFullYear()===year) months[d.getMonth()] += +(e.amount||0);
+    }
+  });
+  return months;
+}
+
+function renderMeDashboard() {
+  var el = document.getElementById('content');
+  var inc = computeDericIncome();
+  var year = new Date().getFullYear();
+  var expYtd = 0;
+  state.meExpenses.forEach(function(e){
+    if(e.date && new Date(e.date+'T12:00:00').getFullYear()===year) expYtd += +(e.amount||0);
+  });
+  var net = inc.total - expYtd;
+
+  var html = '<div class="stat-grid">';
+  html += '<div class="stat-tile" style="border-color:var(--me-border)"><div class="stat-label">Income YTD</div><div class="stat-value"><span style="color:#3ddc84">'+fmtDollar(inc.total)+'</span></div><div class="stat-sub">Zaphire + JDZ</div></div>';
+  html += '<div class="stat-tile"><div class="stat-label">Expenses YTD</div><div class="stat-value">'+fmtDollar(expYtd)+'</div><div class="stat-sub">All vendors</div></div>';
+  html += '<div class="stat-tile" style="border-color:var(--me-border)"><div class="stat-label">Net Kept YTD</div><div class="stat-value"><span style="color:var(--me-light)">'+fmtDollar(net)+'</span></div><div class="stat-sub">After expenses</div></div>';
+  html += '</div>';
+
+  // Recent expenses
+  var recent = state.meExpenses.slice().sort(function(a,b){return (b.date||'')>(a.date||'')?1:-1;}).slice(0,8);
+  html += '<div class="card"><div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Recent Expenses</div></div><button class="btn btn-ghost btn-sm" onclick="showPage(\'me-expenses\')">View All &rarr;</button></div>';
+  if(recent.length){
+    html += '<div class="table-wrap"><table><thead><tr><th>Vendor</th><th>Category</th><th>Date</th><th>Amount</th><th></th></tr></thead><tbody>';
+    recent.forEach(function(e){
+      html += '<tr>';
+      html += '<td onclick="openEditExpense('+e.id+')" style="cursor:pointer"><strong>'+esc(e.vendor)+'</strong></td>';
+      html += '<td><span class="badge-me">'+esc(e.category||'\u2014')+'</span></td>';
+      html += '<td>'+fmtDate(e.date)+'</td>';
+      html += '<td class="mono" style="color:var(--me-light)">'+fmtDollar(e.amount)+'</td>';
+      html += '<td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="openEditExpense('+e.id+')">Edit</button> <button class="btn btn-danger btn-sm" onclick="deleteExpense('+e.id+')">Del</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  } else {
+    html += '<div style="text-align:center;padding:50px;color:var(--muted)">No expenses yet. Click + Add Expense to start tracking.</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderMeExpenses() {
+  var el = document.getElementById('content');
+  var year = new Date().getFullYear();
+
+  // Get unique vendors that have expenses this year
+  var vendorNames = {};
+  state.meExpenses.forEach(function(e){
+    if(e.date && new Date(e.date+'T12:00:00').getFullYear()===year) vendorNames[e.vendor]=true;
+  });
+  var vendors = Object.keys(vendorNames).sort();
+
+  var ytdTotal = 0;
+  var monthTotals = [0,0,0,0,0,0,0,0,0,0,0,0];
+  var vendorData = vendors.map(function(vn){
+    var months = vendorMonthlyTotals(vn);
+    var ytd = months.reduce(function(s,m){return s+m;},0);
+    ytdTotal += ytd;
+    months.forEach(function(m,i){monthTotals[i]+=m;});
+    // Get category from most recent expense for this vendor
+    var vExp = state.meExpenses.filter(function(e){return e.vendor===vn;}).sort(function(a,b){return (b.date||'')>(a.date||'')?1:-1;});
+    var cat = vExp.length ? (vExp[0].category||'\u2014') : '\u2014';
+    // Estimate annual = monthly average * 12 if recurring
+    var activeMonths = months.filter(function(m){return m>0;}).length;
+    var monthlyAvg = activeMonths ? ytd/activeMonths : 0;
+    return {name:vn, months:months, ytd:ytd, cat:cat, annual:monthlyAvg*12};
+  });
+
+  var annualTotal = vendorData.reduce(function(s,v){return s+v.annual;},0);
+  var monthlyAvg = ytdTotal / (new Date().getMonth()+1);
+
+  var html = '<div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">';
+  html += '<div class="stat-tile"><div class="stat-label">Spent YTD</div><div class="stat-value">'+fmtDollar(ytdTotal)+'</div></div>';
+  html += '<div class="stat-tile"><div class="stat-label">Projected Annual</div><div class="stat-value">'+fmtDollar(annualTotal)+'</div></div>';
+  html += '<div class="stat-tile" style="border-color:var(--me-border)"><div class="stat-label">Monthly Average</div><div class="stat-value"><span style="color:var(--me-light)">'+fmtDollar(monthlyAvg)+'</span></div></div>';
+  html += '</div>';
+
+  html += '<div class="card"><div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Year-to-date spending by vendor</div><div class="card-sub">'+year+'</div></div></div>';
+  if(vendors.length){
+    html += '<div class="table-wrap" style="overflow-x:auto"><table><thead><tr><th style="min-width:150px">Vendor</th><th style="min-width:110px">Category</th>';
+    MONTHS_SHORT.forEach(function(m){ html += '<th style="min-width:52px">'+m+'</th>'; });
+    html += '<th style="min-width:70px">YTD</th></tr></thead><tbody>';
+    vendorData.forEach(function(v){
+      html += '<tr onclick="openVendorDetail(\''+esc(v.name).replace(/'/g,"\\'")+'\')" style="cursor:pointer">';
+      html += '<td><strong>'+esc(v.name)+'</strong></td>';
+      html += '<td><span class="badge-me">'+esc(v.cat)+'</span></td>';
+      v.months.forEach(function(m){ html += '<td class="mono" style="font-size:11px">'+(m?fmtDollar(m).replace('$',''):'\u2014')+'</td>'; });
+      html += '<td class="mono" style="color:var(--me-light);font-weight:600">'+fmtDollar(v.ytd).replace('$','')+'</td>';
+      html += '</tr>';
+    });
+    // Total row
+    html += '<tr style="border-top:2px solid var(--border);font-weight:600"><td>Total</td><td></td>';
+    monthTotals.forEach(function(m){ html += '<td class="mono" style="font-size:11px">'+(m?fmtDollar(m).replace('$',''):'\u2014')+'</td>'; });
+    html += '<td class="mono" style="color:var(--me-light)">'+fmtDollar(ytdTotal).replace('$','')+'</td></tr>';
+    html += '</tbody></table></div>';
+  } else {
+    html += '<div style="text-align:center;padding:50px;color:var(--muted)">No expenses recorded for '+year+' yet.</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function openVendorDetail(vendorName) {
+  var txns = state.meExpenses.filter(function(e){return e.vendor===vendorName;}).sort(function(a,b){return (b.date||'')>(a.date||'')?1:-1;});
+  var total = txns.reduce(function(s,e){return s+(+(e.amount||0));},0);
+  var html = '<div class="modal-title" style="color:var(--me-light)">'+esc(vendorName)+'</div>';
+  html += '<div class="modal-sub">'+txns.length+' payment'+(txns.length!==1?'s':'')+' &middot; '+fmtDollar(total)+' total</div>';
+  html += '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Note</th><th>Amount</th><th></th></tr></thead><tbody>';
+  txns.forEach(function(e){
+    html += '<tr><td>'+fmtDate(e.date)+'</td><td><span class="badge-me">'+esc(e.category||'\u2014')+'</span></td>';
+    html += '<td style="font-size:11px;color:var(--muted)">'+esc(e.note||'')+'</td>';
+    html += '<td class="mono" style="color:var(--me-light)">'+fmtDollar(e.amount)+'</td>';
+    html += '<td><button class="btn btn-ghost btn-sm" onclick="closeModal();openEditExpense('+e.id+')">Edit</button></td></tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>';
+  openModal(html);
+}
+
+function renderMeReports() {
+  var el = document.getElementById('content');
+  var inc = computeDericIncome();
+  var year = new Date().getFullYear();
+  var expYtd = 0;
+  var recurring = 0, oneTime = 0;
+  state.meExpenses.forEach(function(e){
+    if(e.date && new Date(e.date+'T12:00:00').getFullYear()===year){
+      var amt = +(e.amount||0);
+      expYtd += amt;
+      if(e.recurring) recurring += amt; else oneTime += amt;
+    }
+  });
+  var net = inc.total - expYtd;
+
+  var html = '';
+
+  // ── Earnings breakdown (Option A top) ──
+  html += '<div class="card" style="margin-bottom:20px;border-color:var(--me-border)">';
+  html += '<div class="card-title" style="margin-bottom:16px;color:var(--me-light)">&#128200; What Deric Earned This Year</div>';
+  html += '<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:0">';
+  html += '<div class="stat-tile" style="border-color:var(--me-border)"><div class="stat-label">Total Earned YTD</div><div class="stat-value"><span style="color:#3ddc84">'+fmtDollar(inc.total)+'</span></div></div>';
+  html += '<div class="stat-tile"><div class="stat-label">From Zaphire Capital</div><div class="stat-value"><span style="color:var(--gold)">'+fmtDollar(inc.zc)+'</span></div><div class="stat-sub">Mortgage commissions</div></div>';
+  html += '<div class="stat-tile"><div class="stat-label">From JDZ Logistics</div><div class="stat-value"><span style="color:var(--jdz)">'+fmtDollar(inc.jdz)+'</span></div><div class="stat-sub">Consulting & services</div></div>';
+  html += '</div>';
+  // Split bar
+  if(inc.total>0){
+    var zcPct = Math.round(inc.zc/inc.total*100);
+    var jdzPct = 100-zcPct;
+    html += '<div style="margin-top:16px"><div style="height:10px;border-radius:6px;overflow:hidden;display:flex">';
+    html += '<div style="width:'+zcPct+'%;background:var(--gold)"></div><div style="width:'+jdzPct+'%;background:var(--jdz)"></div></div>';
+    html += '<div style="display:flex;gap:16px;margin-top:6px;font-size:11px"><span style="color:var(--gold)">&#9632; Zaphire '+zcPct+'%</span><span style="color:var(--jdz)">&#9632; JDZ '+jdzPct+'%</span></div></div>';
+  }
+  html += '</div>';
+
+  // ── Income → Expenses → Net flow (Option B) ──
+  html += '<div class="card" style="margin-bottom:0">';
+  html += '<div class="card-title" style="margin-bottom:16px">Financial Summary</div>';
+  // Income block
+  html += '<div style="border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em">Income YTD</span><span class="mono" style="font-size:20px;color:#3ddc84">+'+fmtDollar(inc.total)+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:4px 0"><span>Zaphire Capital commissions</span><span style="color:var(--gold)">'+fmtDollar(inc.zc)+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:4px 0"><span>JDZ Logistics deals</span><span style="color:var(--jdz)">'+fmtDollar(inc.jdz)+'</span></div>';
+  html += '</div>';
+  // Expenses block
+  html += '<div style="border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em">Expenses YTD</span><span class="mono" style="font-size:20px;color:#ff6b6b">\u2212'+fmtDollar(expYtd)+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:4px 0"><span>&#128257; Recurring</span><span>'+fmtDollar(recurring)+'</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:4px 0"><span>1&#65039;&#8419; One-time</span><span>'+fmtDollar(oneTime)+'</span></div>';
+  html += '</div>';
+  // Net block
+  html += '<div style="border:1px solid var(--me-border);background:rgba(139,92,246,0.06);border-radius:10px;padding:18px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:var(--me-light);text-transform:uppercase;letter-spacing:0.08em">Net Kept YTD</span><span class="mono" style="font-size:26px;color:var(--me-light);font-weight:600">'+fmtDollar(net)+'</span></div>';
+  html += '</div>';
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+function renderMeSettings() {
+  var el = document.getElementById('content');
+  if(!state.settings.meCategories) state.settings.meCategories = ['Housing','Insurance','Phone','Health','Utilities','Food','Transportation','Subscriptions','Other'];
+  var cats = state.settings.meCategories;
+
+  var html = '<div class="card" style="margin-bottom:16px">';
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Expense Categories</div><div class="card-sub">'+cats.length+' categories</div></div></div>';
+  html += '<div class="tag-list">';
+  cats.forEach(function(c,i){
+    html += '<span class="tag" style="border-color:var(--me-border);color:var(--me-light)">'+esc(c)+'<span class="tag-del" onclick="removeMeCat('+i+')">&#215;</span></span>';
+  });
+  html += '</div><div class="tag-add-row">';
+  html += '<input type="text" id="me-cat-input" placeholder="Add category..." style="max-width:240px">';
+  html += '<button class="btn btn-sm" style="background:var(--me);color:white;border:none" onclick="addMeCat()">Add</button></div></div>';
+  el.innerHTML = html;
+}
+
+function addMeCat(){
+  var inp=document.getElementById('me-cat-input');
+  var val=inp.value.trim(); if(!val) return;
+  if(!state.settings.meCategories) state.settings.meCategories=[];
+  if(state.settings.meCategories.indexOf(val)<0) state.settings.meCategories.push(val);
+  inp.value=''; saveSettings(); renderMeSettings();
+}
+function removeMeCat(idx){
+  state.settings.meCategories.splice(idx,1); saveSettings(); renderMeSettings();
+}
+
+// ── EXPENSE FORM ─────────────────────────────
+function openAddExpense(){ showExpenseForm(null); }
+function openEditExpense(id){ showExpenseForm(id); }
+
+function showExpenseForm(id){
+  var e = id ? state.meExpenses.find(function(x){return x.id===id;}) : null;
+  function v(f,def){if(def===undefined)def='';return e?(e[f]!==undefined&&e[f]!==null?e[f]:def):def;}
+  if(!state.settings.meCategories) state.settings.meCategories = ['Housing','Insurance','Phone','Health','Utilities','Food','Transportation','Subscriptions','Other'];
+  var cats = state.settings.meCategories;
+
+  // Existing vendor names for datalist
+  var vendorSet = {};
+  state.meExpenses.forEach(function(x){ if(x.vendor) vendorSet[x.vendor]=true; });
+  var vendorList = Object.keys(vendorSet).sort();
+
+  var html = '<div class="modal-title" style="color:var(--me-light)">'+(e?'Edit Expense':'Add Expense')+'</div>';
+  html += '<div class="modal-sub">Personal finances</div>';
+  html += '<div class="form-grid">';
+  html += '<div class="form-group full"><label>Vendor / Who you paid</label><input type="text" id="fe-vendor" list="fe-vendor-list" value="'+esc(v('vendor'))+'" placeholder="e.g. State Farm, Verizon..."><datalist id="fe-vendor-list">';
+  vendorList.forEach(function(vn){ html += '<option value="'+esc(vn)+'">'; });
+  html += '</datalist></div>';
+  html += '<div class="form-group"><label>Category</label><select id="fe-category">';
+  cats.forEach(function(c){ html += '<option value="'+esc(c)+'"'+(v('category')===c?' selected':'')+'>'+esc(c)+'</option>'; });
+  html += '</select></div>';
+  html += '<div class="form-group"><label>Amount</label><div class="input-prefix"><span>$</span><input type="number" id="fe-amount" step="0.01" value="'+v('amount','')+'" placeholder="0.00"></div></div>';
+  html += '<div class="form-group"><label>Date</label><input type="date" id="fe-date" value="'+(v('date')||new Date().toISOString().slice(0,10))+'"></div>';
+  html += '<div class="form-group"><label>Type</label><select id="fe-recurring">';
+  html += '<option value="true"'+(v('recurring',false)?' selected':'')+'>&#128257; Recurring (monthly)</option>';
+  html += '<option value="false"'+(!v('recurring',false)?' selected':'')+'>1&#65039;&#8419; One-time</option>';
+  html += '</select></div>';
+  html += '<div class="form-group full"><label>Note (optional)</label><input type="text" id="fe-note" value="'+esc(v('note'))+'" placeholder="Any details..."></div>';
+  html += '</div>';
+  html += '<div class="modal-footer" style="justify-content:space-between"><div>';
+  if(id) html += '<button class="btn btn-danger btn-sm" onclick="closeModal();deleteExpense('+id+')">&#128465; Delete</button>';
+  html += '</div><div style="display:flex;gap:8px"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button>';
+  html += '<button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 20px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="saveExpense('+(id||'null')+')">'+(e?'Save Changes':'Add Expense')+'</button></div></div>';
+  openModal(html);
+}
+
+function saveExpense(id){
+  var vendor = document.getElementById('fe-vendor').value.trim();
+  if(!vendor){alert('Vendor name is required.');return;}
+  var data = {
+    vendor: vendor,
+    category: document.getElementById('fe-category').value,
+    amount: parseFloat(document.getElementById('fe-amount').value)||0,
+    date: document.getElementById('fe-date').value||null,
+    recurring: document.getElementById('fe-recurring').value==='true',
+    note: document.getElementById('fe-note').value.trim()||null
+  };
+  setSyncStatus('saving','Saving...');
+  var promise = id ? apiPatch('me_expenses',id,data) : apiPost('me_expenses',[data]);
+  promise.then(function(result){
+    var saved = Array.isArray(result)?result[0]:result;
+    if(id){
+      var idx = state.meExpenses.findIndex(function(x){return x.id===id;});
+      if(idx>=0) state.meExpenses[idx]=saved;
+    } else {
+      state.meExpenses.push(saved);
+    }
+    setSyncStatus('saved','Saved \u2713');
+    closeModal(); showPage(currentPage);
+  }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
+}
+
+function deleteExpense(id){
+  if(!confirm('Delete this expense?')) return;
+  setSyncStatus('saving','Deleting...');
+  apiDelete('me_expenses',id).then(function(){
+    state.meExpenses = state.meExpenses.filter(function(x){return x.id!==id;});
+    setSyncStatus('saved','Deleted \u2713');
+    showPage(currentPage);
+  }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
+}
+
+
+// ── CLOSING CHECKLIST ─────────────────────────
 var CHECKLIST_ITEMS = [
   {id:'excel',      section:'Systems & records',        label:'Update master Excel spreadsheet'},
   {id:'lp_fields',  section:'Systems & records',        label:'Update Lending Pad custom fields'},
