@@ -3305,7 +3305,7 @@ function showExpenseForm(id){
   if(!state.settings.meCategories) state.settings.meCategories = ['Housing','Insurance','Phone','Health','Utilities','Food','Transportation','Subscriptions','Other'];
   var cats = state.settings.meCategories;
 
-  // Existing vendor names for datalist
+  // Existing vendor names for the dropdown
   var vendorSet = {};
   state.meExpenses.forEach(function(x){ if(x.vendor) vendorSet[x.vendor]=true; });
   var vendorList = Object.keys(vendorSet).sort();
@@ -3313,9 +3313,15 @@ function showExpenseForm(id){
   var html = '<div class="modal-title" style="color:var(--me-light)">'+(e?'Edit Expense':'Add Expense')+'</div>';
   html += '<div class="modal-sub">Personal finances</div>';
   html += '<div class="form-grid">';
-  html += '<div class="form-group full"><label>Vendor / Who you paid</label><input type="text" id="fe-vendor" list="fe-vendor-list" value="'+esc(v('vendor'))+'" placeholder="e.g. State Farm, Verizon..."><datalist id="fe-vendor-list">';
-  vendorList.forEach(function(vn){ html += '<option value="'+esc(vn)+'">'; });
-  html += '</datalist></div>';
+  html += '<div class="form-group full"><label>Vendor / Who you paid</label>';
+  html += '<select id="fe-vendor-select" onchange="expenseVendorChanged()"><option value="">-- Select vendor --</option>';
+  vendorList.forEach(function(vn){ html += '<option value="'+esc(vn)+'"'+(v('vendor')===vn?' selected':'')+'>'+esc(vn)+'</option>'; });
+  html += '<option value="__new__">+ Add new vendor...</option></select>';
+  html += '<div id="fe-vendor-new-row" style="display:'+((vendorList.length===0||(e&&vendorList.indexOf(v('vendor'))<0))?'flex':'none')+';gap:8px;margin-top:8px">';
+  html += '<input type="text" id="fe-vendor-new" placeholder="Type new vendor name..." style="flex:1" value="'+((e&&vendorList.indexOf(v('vendor'))<0)?esc(v('vendor')):'')+'">';
+  html += '</div>';
+  html += '<input type="hidden" id="fe-vendor" value="'+esc(v('vendor'))+'">';
+  html += '</div>';
   html += '<div class="form-group"><label>Category</label><select id="fe-category">';
   cats.forEach(function(c){ html += '<option value="'+esc(c)+'"'+(v('category')===c?' selected':'')+'>'+esc(c)+'</option>'; });
   html += '</select></div>';
@@ -3334,9 +3340,36 @@ function showExpenseForm(id){
   openModal(html);
 }
 
+function expenseVendorChanged() {
+  var sel = document.getElementById('fe-vendor-select');
+  var newRow = document.getElementById('fe-vendor-new-row');
+  var hidden = document.getElementById('fe-vendor');
+  if(sel.value === '__new__') {
+    newRow.style.display = 'flex';
+    var ni = document.getElementById('fe-vendor-new');
+    if(ni) ni.focus();
+    if(hidden) hidden.value = '';
+  } else if(sel.value) {
+    newRow.style.display = 'none';
+    if(hidden) hidden.value = sel.value;
+  } else {
+    newRow.style.display = 'none';
+    if(hidden) hidden.value = '';
+  }
+}
+
 function saveExpense(id){
-  var vendor = document.getElementById('fe-vendor').value.trim();
-  if(!vendor){alert('Vendor name is required.');return;}
+  // Vendor comes from the dropdown (hidden field) or the new-vendor input
+  var hiddenV = document.getElementById('fe-vendor');
+  var newV = document.getElementById('fe-vendor-new');
+  var newRow = document.getElementById('fe-vendor-new-row');
+  var vendor = '';
+  if(newRow && newRow.style.display !== 'none' && newV && newV.value.trim()) {
+    vendor = newV.value.trim();
+  } else if(hiddenV && hiddenV.value.trim()) {
+    vendor = hiddenV.value.trim();
+  }
+  if(!vendor){alert('Please select or enter a vendor.');return;}
   var data = {
     vendor: vendor,
     category: document.getElementById('fe-category').value,
