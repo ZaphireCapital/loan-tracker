@@ -826,12 +826,20 @@ function renderPipelineCalendar(pipeline, today) {
     var d = new Date(dateStr+'T12:00:00');
     var key = d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
     if(!_calendarEvents[key]) _calendarEvents[key]=[];
+    // Prevent duplicates: same loan + same type shouldn't appear twice on one day
+    var dup = _calendarEvents[key].some(function(e){ return e.id===l.id && e.type===type; });
+    if(dup) return;
     _calendarEvents[key].push({type:type, name:l.borrower.split(/[\/,&(]/)[0].trim(), id:l.id});
   }
   state.loans.forEach(function(l){
-    addEvent(l.expected_close_date,'close',l);
-    addEvent(l.expected_fund_date,'fund',l);
-    if(l.status==='Closed' && l.closing_date) addEvent(l.closing_date,'close',l);
+    if(l.status==='Closed') {
+      // Closed: plot the ACTUAL closing date only (fall back to expected if no actual)
+      addEvent(l.closing_date || l.expected_close_date, 'close', l);
+    } else {
+      // Active/pending: plot the expected close date
+      addEvent(l.expected_close_date, 'close', l);
+    }
+    addEvent(l.expected_fund_date, 'fund', l);
   });
 
   function buildMonth(year, month) {
