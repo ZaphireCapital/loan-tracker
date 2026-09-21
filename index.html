@@ -3304,24 +3304,27 @@ function renderMeSettings() {
   html += '<button class="btn btn-sm" style="background:var(--me);color:white;border:none" onclick="addMeCat()">Add</button></div></div>';
 
   // ── Accounts (checklist of planner banks) ──
-  var allBanks = (state.settings.plannerBanks && state.settings.plannerBanks.length) ? state.settings.plannerBanks : PLANNER_DEFAULT_BANKS;
-  var enabled = state.settings.meAccounts;
-  var noneChosen = !enabled || !enabled.length;
+  var accts = meAccountList();
   html += '<div class="card" style="margin-bottom:16px">';
-  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Expense Accounts</div><div class="card-sub">Tick which Bill Planner banks can be charged on an expense</div></div></div>';
-  if(!allBanks.length){
-    html += '<div style="font-size:13px;color:var(--muted);padding:8px 0">No banks yet. Add banks in Bill Planner \u2192 Setup first.</div>';
-  } else {
-    html += '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">';
-    allBanks.forEach(function(b,i){
-      var on = noneChosen || (enabled.indexOf(b)>=0);
-      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;'+(i>0?'border-top:1px solid rgba(255,255,255,0.05)':'')+'"><span style="font-size:13px;color:var(--white)">'+esc(b)+'</span>';
-      html += '<input type="checkbox" '+(on?'checked':'')+' onchange="toggleMeAccount(\''+esc(b).replace(/'/g,"\\'")+'\',this.checked)" style="width:17px;height:17px;accent-color:var(--me);cursor:pointer"></div>';
-    });
-    html += '</div>';
-    if(noneChosen) html += '<div style="font-size:11px;color:var(--muted);margin-top:8px">All banks are available by default. Untick any you don\u2019t want to appear.</div>';
-  }
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Expense Accounts</div><div class="card-sub">What an expense is charged to — credit cards and bank accounts</div></div></div>';
+  html += '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px">';
+  accts.forEach(function(a,i){
+    var isCard = a.type==='card';
+    var badge = isCard
+      ? '<span class="badge-me" style="background:rgba(201,168,76,0.15);color:var(--gold);border-color:rgba(201,168,76,0.3)">&#128179; Credit Card</span>'
+      : '<span class="badge-me" style="background:rgba(45,198,83,0.15);color:var(--green);border-color:rgba(45,198,83,0.3)">&#127974; Bank</span>';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;'+(i>0?'border-top:1px solid rgba(255,255,255,0.05)':'')+'">';
+    html += '<span style="font-size:13px;color:var(--white);flex:1">'+esc(a.name)+'</span>';
+    html += badge;
+    html += '<button class="btn btn-danger btn-sm" onclick="removeMeAccount('+i+')" style="flex-shrink:0">&#215;</button></div>';
+  });
   html += '</div>';
+  // Add row: name + type
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
+  html += '<input type="text" id="me-acct-input" placeholder="Account name (e.g. Amex, Discover)..." style="flex:1;min-width:200px">';
+  html += '<select id="me-acct-type" style="max-width:150px"><option value="card">&#128179; Credit Card</option><option value="bank">&#127974; Bank</option></select>';
+  html += '<button class="btn btn-sm" style="background:var(--me);color:white;border:none" onclick="addMeAccount()">Add</button>';
+  html += '</div></div>';
 
   // ── Properties ──
   var props = meProperties();
@@ -3348,15 +3351,28 @@ function addMeCat(){
 function removeMeCat(idx){
   state.settings.meCategories.splice(idx,1); saveSettings(); renderMeSettings();
 }
-function toggleMeAccount(bank, on){
-  var allBanks = (state.settings.plannerBanks && state.settings.plannerBanks.length) ? state.settings.plannerBanks : PLANNER_DEFAULT_BANKS;
-  // If nothing chosen yet, initialize to all banks so we can then remove one
+function addMeAccount(){
+  var inp = document.getElementById('me-acct-input');
+  var typeSel = document.getElementById('me-acct-type');
+  var name = inp.value.trim(); if(!name) return;
+  // Initialize from defaults if empty so we don't wipe the preloaded list
   if(!state.settings.meAccounts || !state.settings.meAccounts.length){
-    state.settings.meAccounts = allBanks.slice();
+    state.settings.meAccounts = ME_DEFAULT_ACCOUNTS.slice();
   }
-  if(on){ if(state.settings.meAccounts.indexOf(bank)<0) state.settings.meAccounts.push(bank); }
-  else { state.settings.meAccounts = state.settings.meAccounts.filter(function(b){return b!==bank;}); }
-  saveSettings();
+  // Ensure objects (migrate strings)
+  meAccountList();
+  if(!state.settings.meAccounts.some(function(a){return a.name===name;})){
+    state.settings.meAccounts.push({name:name, type:typeSel.value});
+  }
+  inp.value=''; saveSettings(); renderMeSettings();
+}
+function removeMeAccount(idx){
+  if(!state.settings.meAccounts || !state.settings.meAccounts.length){
+    state.settings.meAccounts = ME_DEFAULT_ACCOUNTS.slice();
+  }
+  meAccountList();
+  state.settings.meAccounts.splice(idx,1);
+  saveSettings(); renderMeSettings();
 }
 function addMeProperty(){
   var inp=document.getElementById('me-prop-input');
@@ -3379,15 +3395,31 @@ function meCategoriesSorted(){
   var cats = state.settings.meCategories || ['Housing','Insurance','Phone','Health','Utilities','Food','Transportation','Subscriptions','Credit Card','Taxes','Other'];
   return cats.slice().sort(function(a,b){return a.toLowerCase().localeCompare(b.toLowerCase());});
 }
-// Which planner banks are enabled as expense accounts (Idea A: checklist).
-// Defaults to all planner banks if the user hasn't picked yet.
-function meAccounts(){
-  var allBanks = (state.settings.plannerBanks && state.settings.plannerBanks.length) ? state.settings.plannerBanks : PLANNER_DEFAULT_BANKS;
-  var enabled = state.settings.meAccounts;
-  if(!enabled || !enabled.length) return allBanks.slice();
-  // keep only ones still present in bank list, preserve order
-  return allBanks.filter(function(b){ return enabled.indexOf(b)>=0; });
+// Expense accounts — their own list of {name, type:'card'|'bank'}.
+// Cards get charged for subscriptions; banks for direct debits. Separate
+// from Bill Planner banks (which are what you PAY the cards from).
+var ME_DEFAULT_ACCOUNTS = [
+  {name:'Apple Card', type:'card'},
+  {name:'Discover 0029', type:'card'},
+  {name:'Discover 9406', type:'card'},
+  {name:'Capital One (Orchard)', type:'card'},
+  {name:'Fidelity Credit Card', type:'card'},
+  {name:'JDZ Logistics Credit Card', type:'card'},
+  {name:'Chase Bank', type:'bank'},
+  {name:'TD Bank', type:'bank'}
+];
+function meAccountList(){
+  // Migrate: if meAccounts holds plain strings (old model), convert to objects
+  var a = state.settings.meAccounts;
+  if(a && a.length && typeof a[0]==='string'){
+    state.settings.meAccounts = a.map(function(n){return {name:n, type:'bank'};});
+    a = state.settings.meAccounts;
+  }
+  if(!a || !a.length) return ME_DEFAULT_ACCOUNTS.slice();
+  return a;
 }
+// Just the names, for dropdowns
+function meAccounts(){ return meAccountList().map(function(x){return x.name;}); }
 // Properties list (defaults to 73 Weed Hill Ave.)
 function meProperties(){
   return (state.settings.meProperties && state.settings.meProperties.length) ? state.settings.meProperties : ['73 Weed Hill Ave.'];
