@@ -3376,7 +3376,7 @@ function openEditExpense(id){ showExpenseForm(id); }
 
 // Categories, sorted A→Z for all "Me" dropdowns
 function meCategoriesSorted(){
-  var cats = meCategoriesSorted();
+  var cats = state.settings.meCategories || ['Housing','Insurance','Phone','Health','Utilities','Food','Transportation','Subscriptions','Credit Card','Taxes','Other'];
   return cats.slice().sort(function(a,b){return a.toLowerCase().localeCompare(b.toLowerCase());});
 }
 // Which planner banks are enabled as expense accounts (Idea A: checklist).
