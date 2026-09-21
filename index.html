@@ -3213,10 +3213,12 @@ function openVendorDetail(vendorName) {
   var total = txns.reduce(function(s,e){return s+(+(e.amount||0));},0);
   var html = '<div class="modal-title" style="color:var(--me-light)">'+esc(vendorName)+'</div>';
   html += '<div class="modal-sub">'+txns.length+' payment'+(txns.length!==1?'s':'')+' &middot; '+fmtDollar(total)+' total</div>';
-  html += '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Note</th><th>Amount</th><th></th></tr></thead><tbody>';
+  html += '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Account</th><th>Amount</th><th></th></tr></thead><tbody>';
   txns.forEach(function(e){
-    html += '<tr><td>'+fmtDate(e.date)+'</td><td><span class="badge-me">'+esc(e.category||'\u2014')+'</span></td>';
-    html += '<td style="font-size:11px;color:var(--muted)">'+esc(e.note||'')+'</td>';
+    html += '<tr><td>'+fmtDate(e.date)+'</td><td><span class="badge-me">'+esc(e.category||'\u2014')+'</span>';
+    if(e.property) html += ' <span class="badge-me" style="background:rgba(29,158,117,0.15);color:var(--jdz);border-color:rgba(29,158,117,0.3)" title="'+esc(e.property)+'">&#127968;</span>';
+    html += '</td>';
+    html += '<td style="font-size:11px;color:var(--muted)">'+esc(e.account||'\u2014')+'</td>';
     html += '<td class="mono" style="color:var(--me-light)">'+fmtDollar(e.amount)+'</td>';
     html += '<td><button class="btn btn-ghost btn-sm" onclick="closeModal();openEditExpense('+e.id+')">Edit</button></td></tr>';
   });
@@ -3287,17 +3289,52 @@ function renderMeReports() {
 function renderMeSettings() {
   var el = document.getElementById('content');
   if(!state.settings.meCategories) state.settings.meCategories = ['Housing','Insurance','Phone','Health','Utilities','Food','Transportation','Subscriptions','Other'];
-  var cats = state.settings.meCategories;
+  var cats = meCategoriesSorted();
 
+  // ── Categories (shown A→Z) ──
   var html = '<div class="card" style="margin-bottom:16px">';
-  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Expense Categories</div><div class="card-sub">'+cats.length+' categories</div></div></div>';
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Expense Categories</div><div class="card-sub">'+cats.length+' categories, shown A\u2192Z</div></div></div>';
   html += '<div class="tag-list">';
-  cats.forEach(function(c,i){
-    html += '<span class="tag" style="border-color:var(--me-border);color:var(--me-light)">'+esc(c)+'<span class="tag-del" onclick="removeMeCat('+i+')">&#215;</span></span>';
+  cats.forEach(function(c){
+    var realIdx = state.settings.meCategories.indexOf(c);
+    html += '<span class="tag" style="border-color:var(--me-border);color:var(--me-light)">'+esc(c)+'<span class="tag-del" onclick="removeMeCat('+realIdx+')">&#215;</span></span>';
   });
   html += '</div><div class="tag-add-row">';
   html += '<input type="text" id="me-cat-input" placeholder="Add category..." style="max-width:240px">';
   html += '<button class="btn btn-sm" style="background:var(--me);color:white;border:none" onclick="addMeCat()">Add</button></div></div>';
+
+  // ── Accounts (checklist of planner banks) ──
+  var allBanks = (state.settings.plannerBanks && state.settings.plannerBanks.length) ? state.settings.plannerBanks : PLANNER_DEFAULT_BANKS;
+  var enabled = state.settings.meAccounts;
+  var noneChosen = !enabled || !enabled.length;
+  html += '<div class="card" style="margin-bottom:16px">';
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Expense Accounts</div><div class="card-sub">Tick which Bill Planner banks can be charged on an expense</div></div></div>';
+  if(!allBanks.length){
+    html += '<div style="font-size:13px;color:var(--muted);padding:8px 0">No banks yet. Add banks in Bill Planner \u2192 Setup first.</div>';
+  } else {
+    html += '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+    allBanks.forEach(function(b,i){
+      var on = noneChosen || (enabled.indexOf(b)>=0);
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;'+(i>0?'border-top:1px solid rgba(255,255,255,0.05)':'')+'"><span style="font-size:13px;color:var(--white)">'+esc(b)+'</span>';
+      html += '<input type="checkbox" '+(on?'checked':'')+' onchange="toggleMeAccount(\''+esc(b).replace(/'/g,"\\'")+'\',this.checked)" style="width:17px;height:17px;accent-color:var(--me);cursor:pointer"></div>';
+    });
+    html += '</div>';
+    if(noneChosen) html += '<div style="font-size:11px;color:var(--muted);margin-top:8px">All banks are available by default. Untick any you don\u2019t want to appear.</div>';
+  }
+  html += '</div>';
+
+  // ── Properties ──
+  var props = meProperties();
+  html += '<div class="card" style="margin-bottom:0">';
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Properties</div><div class="card-sub">For tagging expenses tied to a home</div></div></div>';
+  html += '<div class="tag-list">';
+  props.forEach(function(p,i){
+    html += '<span class="tag" style="border-color:var(--me-border);color:var(--me-light)">'+esc(p)+'<span class="tag-del" onclick="removeMeProperty('+i+')">&#215;</span></span>';
+  });
+  html += '</div><div class="tag-add-row">';
+  html += '<input type="text" id="me-prop-input" placeholder="Add property address..." style="max-width:280px">';
+  html += '<button class="btn btn-sm" style="background:var(--me);color:white;border:none" onclick="addMeProperty()">Add</button></div></div>';
+
   el.innerHTML = html;
 }
 
@@ -3311,10 +3348,50 @@ function addMeCat(){
 function removeMeCat(idx){
   state.settings.meCategories.splice(idx,1); saveSettings(); renderMeSettings();
 }
+function toggleMeAccount(bank, on){
+  var allBanks = (state.settings.plannerBanks && state.settings.plannerBanks.length) ? state.settings.plannerBanks : PLANNER_DEFAULT_BANKS;
+  // If nothing chosen yet, initialize to all banks so we can then remove one
+  if(!state.settings.meAccounts || !state.settings.meAccounts.length){
+    state.settings.meAccounts = allBanks.slice();
+  }
+  if(on){ if(state.settings.meAccounts.indexOf(bank)<0) state.settings.meAccounts.push(bank); }
+  else { state.settings.meAccounts = state.settings.meAccounts.filter(function(b){return b!==bank;}); }
+  saveSettings();
+}
+function addMeProperty(){
+  var inp=document.getElementById('me-prop-input');
+  var val=inp.value.trim(); if(!val) return;
+  if(!state.settings.meProperties || !state.settings.meProperties.length) state.settings.meProperties = ['73 Weed Hill Ave.'];
+  if(state.settings.meProperties.indexOf(val)<0) state.settings.meProperties.push(val);
+  inp.value=''; saveSettings(); renderMeSettings();
+}
+function removeMeProperty(idx){
+  if(!state.settings.meProperties || !state.settings.meProperties.length) state.settings.meProperties = ['73 Weed Hill Ave.'];
+  state.settings.meProperties.splice(idx,1); saveSettings(); renderMeSettings();
+}
 
 // ── EXPENSE FORM ─────────────────────────────
 function openAddExpense(){ showExpenseForm(null); }
 function openEditExpense(id){ showExpenseForm(id); }
+
+// Categories, sorted A→Z for all "Me" dropdowns
+function meCategoriesSorted(){
+  var cats = meCategoriesSorted();
+  return cats.slice().sort(function(a,b){return a.toLowerCase().localeCompare(b.toLowerCase());});
+}
+// Which planner banks are enabled as expense accounts (Idea A: checklist).
+// Defaults to all planner banks if the user hasn't picked yet.
+function meAccounts(){
+  var allBanks = (state.settings.plannerBanks && state.settings.plannerBanks.length) ? state.settings.plannerBanks : PLANNER_DEFAULT_BANKS;
+  var enabled = state.settings.meAccounts;
+  if(!enabled || !enabled.length) return allBanks.slice();
+  // keep only ones still present in bank list, preserve order
+  return allBanks.filter(function(b){ return enabled.indexOf(b)>=0; });
+}
+// Properties list (defaults to 73 Weed Hill Ave.)
+function meProperties(){
+  return (state.settings.meProperties && state.settings.meProperties.length) ? state.settings.meProperties : ['73 Weed Hill Ave.'];
+}
 
 function showExpenseForm(id){
   var e = id ? state.meExpenses.find(function(x){return x.id===id;}) : null;
@@ -3340,21 +3417,42 @@ function showExpenseForm(id){
   html += '<input type="hidden" id="fe-vendor" value="'+esc(v('vendor'))+'">';
   html += '</div>';
   html += '<div class="form-group"><label>Category</label><select id="fe-category">';
-  cats.forEach(function(c){ html += '<option value="'+esc(c)+'"'+(v('category')===c?' selected':'')+'>'+esc(c)+'</option>'; });
+  meCategoriesSorted().forEach(function(c){ html += '<option value="'+esc(c)+'"'+(v('category')===c?' selected':'')+'>'+esc(c)+'</option>'; });
   html += '</select></div>';
   html += '<div class="form-group"><label>Amount</label><div class="input-prefix"><span>$</span><input type="number" id="fe-amount" step="0.01" value="'+v('amount','')+'" placeholder="0.00"></div></div>';
   html += '<div class="form-group"><label>Date</label><input type="date" id="fe-date" value="'+(v('date')||new Date().toISOString().slice(0,10))+'"></div>';
+  // Account charged
+  html += '<div class="form-group"><label>Account charged</label><select id="fe-account">';
+  html += '<option value="">— account —</option>';
+  meAccounts().forEach(function(a){ html += '<option value="'+esc(a)+'"'+(v('account')===a?' selected':'')+'>'+esc(a)+'</option>'; });
+  html += '</select></div>';
   html += '<div class="form-group"><label>Type</label><select id="fe-recurring">';
   html += '<option value="true"'+(v('recurring',false)?' selected':'')+'>&#128257; Recurring (monthly)</option>';
   html += '<option value="false"'+(!v('recurring',false)?' selected':'')+'>1&#65039;&#8419; One-time</option>';
   html += '</select></div>';
-  html += '<div class="form-group full"><label>Note (optional)</label><input type="text" id="fe-note" value="'+esc(v('note'))+'" placeholder="Any details..."></div>';
   html += '</div>';
-  html += '<div class="modal-footer" style="justify-content:space-between"><div>';
+  // Property toggle
+  var propOn = !!v('property');
+  var props = meProperties();
+  html += '<div style="display:flex;align-items:center;gap:10px;background:rgba(139,92,246,0.06);border:1px solid var(--me-border);border-radius:8px;padding:10px 12px;margin:4px 0 14px">';
+  html += '<input type="checkbox" id="fe-prop-check" '+(propOn?'checked':'')+' onchange="toggleExpenseProperty()" style="width:16px;height:16px;accent-color:var(--me)">';
+  html += '<label for="fe-prop-check" style="font-size:13px;color:var(--white);cursor:pointer;flex:1;margin:0">Tied to a property</label>';
+  html += '<select id="fe-property" style="width:auto;max-width:200px;display:'+(propOn?'block':'none')+'">';
+  props.forEach(function(p){ html += '<option value="'+esc(p)+'"'+(v('property')===p?' selected':'')+'>'+esc(p)+'</option>'; });
+  html += '</select></div>';
+  html += '<div class="form-grid"><div class="form-group full"><label>Note (optional)</label><input type="text" id="fe-note" value="'+esc(v('note'))+'" placeholder="Any details..."></div></div>';
+  html += '<div class="modal-footer" style="justify-content:space-between"><div style="display:flex;gap:8px">';
   if(id) html += '<button class="btn btn-danger btn-sm" onclick="closeModal();deleteExpense('+id+')">&#128465; Delete</button>';
+  if(!id) html += '<button class="btn btn-ghost btn-sm" onclick="showBatchExpenseForm()">&#128203; Multiple dates</button>';
   html += '</div><div style="display:flex;gap:8px"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button>';
   html += '<button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 20px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="saveExpense('+(id||'null')+')">'+(e?'Save Changes':'Add Expense')+'</button></div></div>';
   openModal(html);
+}
+
+function toggleExpenseProperty(){
+  var chk = document.getElementById('fe-prop-check');
+  var sel = document.getElementById('fe-property');
+  if(sel) sel.style.display = chk.checked ? 'block' : 'none';
 }
 
 function expenseVendorChanged() {
@@ -3387,11 +3485,15 @@ function saveExpense(id){
     vendor = hiddenV.value.trim();
   }
   if(!vendor){alert('Please select or enter a vendor.');return;}
+  var propChk = document.getElementById('fe-prop-check');
+  var propSel = document.getElementById('fe-property');
   var data = {
     vendor: vendor,
     category: document.getElementById('fe-category').value,
     amount: parseFloat(document.getElementById('fe-amount').value)||0,
     date: document.getElementById('fe-date').value||null,
+    account: document.getElementById('fe-account').value||null,
+    property: (propChk && propChk.checked && propSel) ? propSel.value : null,
     recurring: document.getElementById('fe-recurring').value==='true',
     note: document.getElementById('fe-note').value.trim()||null
   };
@@ -3408,6 +3510,119 @@ function saveExpense(id){
     setSyncStatus('saved','Saved \u2713');
     closeModal(); showPage(currentPage);
   }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
+}
+
+// \u2500\u2500 BATCH: one vendor, multiple dated payments \u2500\u2500
+var _batchRowSeq = 0;
+function showBatchExpenseForm(){
+  _batchRowSeq = 0;
+  var vendorSet = {};
+  state.meExpenses.forEach(function(x){ if(x.vendor) vendorSet[x.vendor]=true; });
+  var vendorList = Object.keys(vendorSet).sort();
+  var props = meProperties();
+
+  var html = '<div class="modal-title" style="color:var(--me-light)">Add Payments \u2014 One Vendor</div>';
+  html += '<div class="modal-sub">Each dated row becomes its own expense</div>';
+
+  // Shared settings
+  html += '<div style="background:rgba(139,92,246,0.06);border:1px solid var(--me-border);border-radius:9px;padding:12px;margin-bottom:14px">';
+  html += '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--me-light);margin-bottom:10px">Applies to all payments</div>';
+  html += '<div class="form-grid">';
+  html += '<div class="form-group full"><label>Vendor</label>';
+  html += '<select id="bx-vendor-select" onchange="batchVendorChanged()"><option value="">-- Select vendor --</option>';
+  vendorList.forEach(function(vn){ html += '<option value="'+esc(vn)+'">'+esc(vn)+'</option>'; });
+  html += '<option value="__new__">+ Add new vendor...</option></select>';
+  html += '<div id="bx-vendor-new-row" style="display:none;margin-top:8px"><input type="text" id="bx-vendor-new" placeholder="Type new vendor name..." style="width:100%"></div>';
+  html += '<input type="hidden" id="bx-vendor" value="">';
+  html += '</div>';
+  html += '<div class="form-group"><label>Category</label><select id="bx-category">';
+  meCategoriesSorted().forEach(function(c){ html += '<option value="'+esc(c)+'">'+esc(c)+'</option>'; });
+  html += '</select></div>';
+  html += '<div class="form-group"><label>Account charged</label><select id="bx-account"><option value="">\u2014 account \u2014</option>';
+  meAccounts().forEach(function(a){ html += '<option value="'+esc(a)+'">'+esc(a)+'</option>'; });
+  html += '</select></div>';
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-top:4px">';
+  html += '<input type="checkbox" id="bx-prop-check" onchange="toggleBatchProperty()" style="width:15px;height:15px;accent-color:var(--me)">';
+  html += '<label for="bx-prop-check" style="font-size:13px;color:var(--white);cursor:pointer;margin:0">Tied to a property</label>';
+  html += '<select id="bx-property" style="width:auto;max-width:200px;display:none">';
+  props.forEach(function(p){ html += '<option value="'+esc(p)+'">'+esc(p)+'</option>'; });
+  html += '</select></div>';
+  html += '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-top:10px;cursor:pointer"><input type="checkbox" id="bx-recurring" style="width:15px;height:15px;accent-color:var(--me)"> Mark all as recurring (monthly)</label>';
+  html += '</div>';
+
+  // Payment rows
+  html += '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Payments</div>';
+  html += '<div id="bx-rows"></div>';
+  html += '<button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:12px" onclick="addBatchRow()">+ Add another payment date</button>';
+  html += '<div id="bx-total" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:rgba(139,92,246,0.08);border-radius:8px;margin-bottom:14px;font-size:13px"><span style="color:var(--muted)">Total</span><span class="mono" style="color:var(--me-light);font-weight:500">$0.00</span></div>';
+
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="openAddExpense()">&#8592; Single</button><button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 20px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="saveBatchExpenses()">Save payments</button></div>';
+  openModal(html);
+  // seed 2 rows
+  addBatchRow(); addBatchRow();
+}
+
+function batchVendorChanged(){
+  var sel = document.getElementById('bx-vendor-select');
+  var newRow = document.getElementById('bx-vendor-new-row');
+  var hidden = document.getElementById('bx-vendor');
+  if(sel.value==='__new__'){ newRow.style.display='block'; var ni=document.getElementById('bx-vendor-new'); if(ni) ni.focus(); if(hidden) hidden.value=''; }
+  else if(sel.value){ newRow.style.display='none'; if(hidden) hidden.value=sel.value; }
+  else { newRow.style.display='none'; if(hidden) hidden.value=''; }
+}
+function toggleBatchProperty(){
+  var chk=document.getElementById('bx-prop-check'); var sel=document.getElementById('bx-property');
+  if(sel) sel.style.display = chk.checked ? 'block' : 'none';
+}
+function addBatchRow(){
+  var rid = 'bxr-'+(_batchRowSeq++);
+  var today = new Date().toISOString().slice(0,10);
+  var div = document.createElement('div');
+  div.id = rid;
+  div.style.cssText = 'display:grid;grid-template-columns:1.1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px';
+  div.innerHTML = '<input type="date" value="'+today+'" class="bx-date">'
+    + '<div class="input-prefix"><span>$</span><input type="number" step="0.01" placeholder="0.00" class="bx-amt" oninput="updateBatchTotal()"></div>'
+    + '<button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();updateBatchTotal()">&#215;</button>';
+  document.getElementById('bx-rows').appendChild(div);
+}
+function updateBatchTotal(){
+  var amts = document.querySelectorAll('#bx-rows .bx-amt');
+  var t=0; amts.forEach(function(a){ t += parseFloat(a.value)||0; });
+  var el = document.getElementById('bx-total');
+  if(el) el.querySelector('span:last-child').textContent = fmtDollar(t);
+}
+function saveBatchExpenses(){
+  var hiddenV = document.getElementById('bx-vendor');
+  var newV = document.getElementById('bx-vendor-new');
+  var newRow = document.getElementById('bx-vendor-new-row');
+  var vendor = '';
+  if(newRow && newRow.style.display!=='none' && newV && newV.value.trim()) vendor = newV.value.trim();
+  else if(hiddenV && hiddenV.value.trim()) vendor = hiddenV.value.trim();
+  if(!vendor){ alert('Please select or enter a vendor.'); return; }
+  var category = document.getElementById('bx-category').value;
+  var account = document.getElementById('bx-account').value||null;
+  var recurring = document.getElementById('bx-recurring').checked;
+  var propChk = document.getElementById('bx-prop-check');
+  var propSel = document.getElementById('bx-property');
+  var property = (propChk && propChk.checked && propSel) ? propSel.value : null;
+
+  var rows = document.querySelectorAll('#bx-rows > div');
+  var payloads = [];
+  rows.forEach(function(r){
+    var date = r.querySelector('.bx-date').value;
+    var amt = parseFloat(r.querySelector('.bx-amt').value)||0;
+    if(date && amt>0){
+      payloads.push({ vendor:vendor, category:category, amount:amt, date:date, account:account, property:property, recurring:recurring, note:null });
+    }
+  });
+  if(!payloads.length){ alert('Add at least one payment with a date and amount.'); return; }
+  setSyncStatus('saving','Saving...');
+  apiPost('me_expenses', payloads).then(function(result){
+    (Array.isArray(result)?result:[result]).forEach(function(x){ state.meExpenses.push(x); });
+    setSyncStatus('saved', payloads.length+' saved \u2713');
+    closeModal(); showPage(currentPage);
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
 }
 
 function deleteExpense(id){
@@ -3550,7 +3765,7 @@ function plannerSection(section, title, rows, banks, mid){
       html += '<tr style="'+rowStyle+'">';
       html += '<td><input type="text" value="'+esc(r.name||'')+'" placeholder="Name..." onchange="updateBillField('+r.id+',\'name\',this.value)" style="background:transparent;border:none;color:var(--white);font-size:13px;width:100%;outline:none"></td>';
       html += '<td><select onchange="updateBillField('+r.id+',\'category\',this.value)" style="background:transparent;border:none;color:var(--muted);font-size:12px;outline:none;cursor:pointer">';
-      var cats = state.settings.meCategories || ['Housing','Insurance','Phone','Health','Utilities','Food','Transportation','Subscriptions','Credit Card','Taxes','Other'];
+      var cats = meCategoriesSorted();
       html += '<option value="">\u2014</option>';
       cats.forEach(function(c){ html += '<option value="'+esc(c)+'"'+(r.category===c?' selected':'')+'>'+esc(c)+'</option>'; });
       html += '</select></td>';
@@ -3707,7 +3922,7 @@ function togglePlannerPaid(id, checked){
     html += '<div class="form-grid"><div class="form-group"><label>Amount paid</label><div class="input-prefix"><span>$</span><input type="number" step="0.01" id="pp-amount" value="'+(b.to_pay||'')+'" placeholder="0.00"></div></div>';
     html += '<div class="form-group"><label>Date paid</label><input type="date" id="pp-date" value="'+today+'"></div></div>';
     html += '<div class="form-group" style="margin-top:12px"><label>Category</label><select id="pp-category">';
-    var cats = state.settings.meCategories || ['Housing','Insurance','Phone','Health','Utilities','Food','Transportation','Subscriptions','Credit Card','Taxes','Other'];
+    var cats = meCategoriesSorted();
     cats.forEach(function(c){ html += '<option value="'+esc(c)+'"'+(b.category===c?' selected':'')+'>'+esc(c)+'</option>'; });
     html += '</select></div>';
     html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="cancelPlannerPaid('+id+')">Cancel</button><button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 20px;border-radius:8px;cursor:pointer" onclick="confirmPlannerPaid('+id+')">&#10003; Confirm Paid</button></div>';
