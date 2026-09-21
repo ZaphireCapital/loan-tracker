@@ -225,6 +225,7 @@ textarea{resize:vertical;min-height:80px;}
       <div class="nav-section">
         <div class="nav-label me-label">Personal</div>
         <div class="nav-item" id="nav-me-dashboard" onclick="showPage('me-dashboard')"><span class="icon">📊</span> Dashboard</div>
+        <div class="nav-item" id="nav-me-planner" onclick="showPage('me-planner')"><span class="icon">📋</span> Bill Planner</div>
         <div class="nav-item" id="nav-me-expenses" onclick="showPage('me-expenses')"><span class="icon">📤</span> Expenses &amp; YTD</div>
         <div class="nav-item" id="nav-me-reports" onclick="showPage('me-reports')"><span class="icon">📈</span> Reports</div>
       </div>
@@ -301,6 +302,8 @@ var state = {
   jdzTrash: [],
   meExpenses: [],
   meVendors: [],
+  meBillMonths: [],
+  meBills: [],
   settings: {
     loanTypes:['Purchase','Refinance','HELOC','FHA','VA','Conventional','Jumbo'],
     loanStatuses:['Active','Pending','Closed','On Hold','Cancelled'],
@@ -432,7 +435,9 @@ function initApp() {
       apiGet('zt_dates', 'select=*').catch(function(){ return []; }),
       apiGet('jdz_deals', 'select=*').catch(function(){ return []; }),
       apiGet('me_expenses', 'select=*').catch(function(){ return []; }),
-      apiGet('me_vendors', 'select=*').catch(function(){ return []; })
+      apiGet('me_vendors', 'select=*').catch(function(){ return []; }),
+      apiGet('me_bill_months', 'select=*').catch(function(){ return []; }),
+      apiGet('me_bills', 'select=*').catch(function(){ return []; })
     ]);
   }).then(function(results) {
     (results[0]||[]).forEach(function(n) { state.closedNotes[n.loan_id] = n.note; });
@@ -445,6 +450,8 @@ function initApp() {
     var allExp = results[3] || [];
     state.meExpenses = allExp.filter(function(e){ return !e.deleted_at; });
     state.meVendors = (results[4] || []);
+    state.meBillMonths = (results[5] || []);
+    state.meBills = (results[6] || []);
     updateTrashBadge();
     updateDatesBadge();
     updateJdzTrashBadge();
@@ -626,7 +633,7 @@ function switchCompany(co) {
 
 function showPage(page) {
   currentPage = page;
-  var allNavIds = ['dashboard','loans','closed','earnings','settings','trash','dates','jdz-dashboard','jdz-deals','jdz-history','jdz-settings','jdz-trash','me-dashboard','me-expenses','me-reports','me-settings'];
+  var allNavIds = ['dashboard','loans','closed','earnings','settings','trash','dates','jdz-dashboard','jdz-deals','jdz-history','jdz-settings','jdz-trash','me-dashboard','me-planner','me-expenses','me-reports','me-settings'];
   allNavIds.forEach(function(p) {
     var el = document.getElementById('nav-' + p);
     if(el) el.className = 'nav-item';
@@ -646,7 +653,7 @@ function showPage(page) {
     earnings:'Earnings & Payouts', settings:'Settings', trash:'Trash', dates:'Important Dates',
     'jdz-dashboard':'JDZ Dashboard', 'jdz-deals':'Deals', 'jdz-history':'Deal History',
     'jdz-settings':'JDZ Settings', 'jdz-trash':'JDZ Trash',
-    'me-dashboard':'Personal Dashboard', 'me-expenses':'Expenses & YTD', 'me-reports':'Reports', 'me-settings':'Personal Settings'
+    'me-dashboard':'Personal Dashboard', 'me-planner':'Bill Planner', 'me-expenses':'Expenses & YTD', 'me-reports':'Reports', 'me-settings':'Personal Settings'
   };
   document.getElementById('page-title').textContent = titles[page] || page;
   var acts = document.getElementById('topbar-actions');
@@ -658,6 +665,8 @@ function showPage(page) {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--jdz);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddDeal()">+ Add Deal</button>';
   } else if(page==='me-expenses'||page==='me-dashboard') {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddExpense()">+ Add Expense</button>';
+  } else if(page==='me-planner') {
+    acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-outline btn-sm" onclick="openPlannerSettings()">&#9881; Setup</button> <button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddPlannerMonth()">+ Month</button>';
   } else {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button>';
   }
@@ -669,7 +678,7 @@ function showPage(page) {
     'jdz-dashboard':renderJdzDashboard, 'jdz-deals':renderJdzDeals,
     'jdz-history':renderJdzHistory, 'jdz-settings':renderJdzSettings, 'jdz-trash':renderJdzTrash,
     'me-dashboard':renderMeDashboard, 'me-expenses':renderMeExpenses,
-    'me-reports':renderMeReports, 'me-settings':renderMeSettings
+    'me-reports':renderMeReports, 'me-settings':renderMeSettings, 'me-planner':renderMePlanner
   };
   setTimeout(function() {
     try { (renders[page]||renderDashboard)(); }
@@ -3411,6 +3420,354 @@ function deleteExpense(id){
   }).catch(function(e){setSyncStatus('error','Failed');alert('Error: '+e.message);});
 }
 
+
+// ── BILL PLANNER ──────────────────────────────
+var PLANNER_DEFAULT_BANKS = ['TD Bank','Chase Bank'];
+var PLANNER_DEFAULT_REC = [
+  {name:'Aquarion Water Bill',cat:'Utilities'},
+  {name:'Aquarion Water Bill (Sewer)',cat:'Utilities'},
+  {name:'Capital One (Orchard)',cat:'Credit Card'},
+  {name:'Apple Card',cat:'Credit Card'},
+  {name:'Discover 0029',cat:'Credit Card'},
+  {name:'Discover 9406',cat:'Credit Card'},
+  {name:'Eversource: Gas',cat:'Utilities'},
+  {name:'Eversource: Electric',cat:'Utilities'},
+  {name:'Fidelity Credit Card',cat:'Credit Card'},
+  {name:'Chevy Loan',cat:'Transportation'},
+  {name:'Verizon Card',cat:'Phone'},
+  {name:'Tax Payment Plan (IRS)',cat:'Taxes'},
+  {name:'State Farm',cat:'Insurance'},
+  {name:'TD Bank Credit Acct 3881',cat:'Credit Card'},
+  {name:'HELOC',cat:'Housing'},
+  {name:'JDZ Logistics Credit Card',cat:'Credit Card'}
+];
+var PLANNER_DEFAULT_ONE = [
+  {name:'CT Taxes for Chevy',cat:'Taxes'},
+  {name:'CT Taxes for Land Rover',cat:'Taxes'},
+  {name:'CT State Tax',cat:'Taxes'},
+  {name:'Registration Fee',cat:'Transportation'}
+];
+
+var _plannerMonthId = null;
+
+function plannerMonths(){ return (state.meBillMonths||[]).slice().sort(function(a,b){return (a.sort_order||0)-(b.sort_order||0);}); }
+function plannerBanks(){
+  var m = (state.meBillMonths||[]).find(function(x){return x.id===_plannerMonthId;});
+  if(m && m.bank_bals && typeof m.bank_bals==='object') {
+    var names = Object.keys(m.bank_bals);
+    if(names.length) return names;
+  }
+  return (state.settings.plannerBanks && state.settings.plannerBanks.length) ? state.settings.plannerBanks : PLANNER_DEFAULT_BANKS;
+}
+function billsForMonth(mid){ return (state.meBills||[]).filter(function(b){return b.month_id===mid;}); }
+
+function renderMePlanner(){
+  var el = document.getElementById('content');
+  var months = plannerMonths();
+
+  if(!months.length){
+    el.innerHTML = '<div class="card" style="text-align:center;padding:50px"><div style="font-size:40px;margin-bottom:12px;opacity:0.4">&#128203;</div><div style="font-size:15px;font-weight:600;color:var(--white);margin-bottom:6px">No months yet</div><div style="font-size:13px;color:var(--muted);margin-bottom:20px">Create your first month to start planning bills. Your recurring bills will be preloaded.</div><button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:9px 20px;border-radius:8px;cursor:pointer" onclick="openAddPlannerMonth()">+ Create First Month</button></div>';
+    return;
+  }
+
+  if(!_plannerMonthId || !months.find(function(m){return m.id===_plannerMonthId;})) {
+    _plannerMonthId = months[months.length-1].id;
+  }
+  var m = months.find(function(x){return x.id===_plannerMonthId;});
+  var banks = plannerBanks();
+  var bals = (m.bank_bals && typeof m.bank_bals==='object') ? m.bank_bals : {};
+  var bills = billsForMonth(m.id);
+  var rec = bills.filter(function(b){return b.section==='rec';}).sort(function(a,b){return (a.sort_order||0)-(b.sort_order||0);});
+  var one = bills.filter(function(b){return b.section==='one';}).sort(function(a,b){return (a.sort_order||0)-(b.sort_order||0);});
+
+  var totalBal = banks.reduce(function(s,b){return s+(+(bals[b]||0));},0);
+  var toPayTotal=0, paidTotal=0;
+  var bankPay = {}; banks.forEach(function(b){bankPay[b]=0;});
+  bills.forEach(function(r){
+    toPayTotal += +(r.to_pay||0);
+    if(r.paid) paidTotal += +(r.to_pay||0);
+    if(r.from_bank && bankPay[r.from_bank]!==undefined) bankPay[r.from_bank] += +(r.to_pay||0);
+  });
+  var remaining = totalBal - toPayTotal;
+
+  var html = '';
+
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">';
+  html += '<select onchange="_plannerMonthId=+this.value;renderMePlanner()" style="max-width:220px">';
+  months.forEach(function(mm){ html += '<option value="'+mm.id+'"'+(mm.id===m.id?' selected':'')+'>'+esc(mm.label)+'</option>'; });
+  html += '</select>';
+  html += '<input type="text" value="'+esc(m.as_of||'')+'" placeholder="As of date..." onchange="updatePlannerMonthField('+m.id+',\'as_of\',this.value)" style="max-width:130px;font-size:12px">';
+  html += '<button class="btn btn-danger btn-sm" onclick="deletePlannerMonth('+m.id+')" style="margin-left:auto">&#128465; Delete month</button>';
+  html += '</div>';
+
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px">';
+  banks.forEach(function(b){
+    var v = +(bals[b]||0);
+    html += '<div class="card" style="margin-bottom:0;padding:14px 16px">';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">'+esc(b)+'</div>';
+    html += '<div style="display:flex;align-items:baseline;gap:4px"><span style="font-size:18px;color:var(--muted)">$</span><input type="number" step="0.01" value="'+(v||'')+'" placeholder="0.00" onchange="updateBankBal('+m.id+',\''+esc(b).replace(/'/g,"\\'")+'\',this.value)" style="font-size:22px;font-weight:600;font-family:\'JetBrains Mono\',monospace;background:transparent;border:none;color:var(--white);width:100%;outline:none;padding:0"></div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  html += '<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">';
+  html += '<div class="stat-tile"><div class="stat-label">Total balance</div><div class="stat-value">'+fmtDollar(totalBal)+'</div></div>';
+  html += '<div class="stat-tile"><div class="stat-label">Total to pay</div><div class="stat-value">'+fmtDollar(toPayTotal)+'</div></div>';
+  html += '<div class="stat-tile" style="border-color:'+(remaining>=0?'rgba(45,198,83,0.4)':'rgba(230,57,70,0.4)')+'"><div class="stat-label">Remaining</div><div class="stat-value"><span style="color:'+(remaining>=0?'var(--green)':'var(--red)')+'">'+fmtDollar(remaining)+'</span></div></div>';
+  html += '<div class="stat-tile"><div class="stat-label">Already paid</div><div class="stat-value"><span style="color:var(--me-light)">'+fmtDollar(paidTotal)+'</span></div></div>';
+  html += '</div>';
+
+  html += plannerSection('rec','&#128257; Recurring Monthly Bills', rec, banks, m.id);
+  html += plannerSection('one','&#128204; One-Time Payments', one, banks, m.id);
+
+  html += '<div class="card" style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin-bottom:0">';
+  banks.forEach(function(b,idx){
+    var rem = (+(bals[b]||0)) - (bankPay[b]||0);
+    if(idx>0) html += '<div style="width:1px;height:36px;background:var(--border)"></div>';
+    html += '<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">'+esc(b)+' remaining</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:18px;font-weight:600;color:'+(rem>=0?'var(--green)':'var(--red)')+'">'+fmtDollar(rem)+'</div></div>';
+  });
+  html += '<div style="width:1px;height:36px;background:var(--border)"></div>';
+  html += '<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Overall remaining</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:18px;font-weight:600;color:'+(remaining>=0?'var(--green)':'var(--red)')+'">'+fmtDollar(remaining)+'</div></div>';
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+function plannerSection(section, title, rows, banks, mid){
+  var nameLabel = section==='rec' ? 'Bill / Account' : 'Item';
+  var subBal=0, subPay=0;
+  rows.forEach(function(r){ subBal+=+(r.balance||0); subPay+=+(r.to_pay||0); });
+
+  var html = '<div class="card" style="margin-bottom:14px">';
+  html += '<div class="card-header" style="margin-bottom:0"><div><div class="card-title" style="color:var(--me-light)">'+title+'</div><div class="card-sub">'+rows.length+' item'+(rows.length!==1?'s':'')+'</div></div><button class="btn btn-sm" style="background:var(--me);color:white;border:none" onclick="addPlannerBill('+mid+',\''+section+'\')">+ Add</button></div>';
+  html += '<div class="table-wrap" style="margin-top:12px"><table><thead><tr>';
+  html += '<th style="min-width:150px">'+nameLabel+'</th><th style="min-width:90px">Category</th><th class="mono" style="text-align:right">Balance</th><th class="mono" style="text-align:right">To Pay</th><th style="text-align:center">Paid</th><th>From Bank</th><th style="min-width:60px">Due</th><th></th>';
+  html += '</tr></thead><tbody>';
+
+  if(rows.length){
+    rows.forEach(function(r){
+      var rowStyle = r.paid ? 'opacity:0.5' : '';
+      html += '<tr style="'+rowStyle+'">';
+      html += '<td><input type="text" value="'+esc(r.name||'')+'" placeholder="Name..." onchange="updateBillField('+r.id+',\'name\',this.value)" style="background:transparent;border:none;color:var(--white);font-size:13px;width:100%;outline:none"></td>';
+      html += '<td><select onchange="updateBillField('+r.id+',\'category\',this.value)" style="background:transparent;border:none;color:var(--muted);font-size:12px;outline:none;cursor:pointer">';
+      var cats = state.settings.meCategories || ['Housing','Insurance','Phone','Health','Utilities','Food','Transportation','Subscriptions','Credit Card','Taxes','Other'];
+      html += '<option value="">\u2014</option>';
+      cats.forEach(function(c){ html += '<option value="'+esc(c)+'"'+(r.category===c?' selected':'')+'>'+esc(c)+'</option>'; });
+      html += '</select></td>';
+      html += '<td style="text-align:right"><input type="number" step="0.01" value="'+(r.balance||'')+'" placeholder="0.00" onchange="updateBillField('+r.id+',\'balance\',parseFloat(this.value)||0)" class="mono" style="background:transparent;border:none;color:var(--muted);font-size:13px;width:80px;outline:none;text-align:right"></td>';
+      html += '<td style="text-align:right"><input type="number" step="0.01" value="'+(r.to_pay||'')+'" placeholder="0.00" onchange="updateBillField('+r.id+',\'to_pay\',parseFloat(this.value)||0)" class="mono" style="background:transparent;border:none;color:var(--me-light);font-size:13px;font-weight:500;width:80px;outline:none;text-align:right"></td>';
+      html += '<td style="text-align:center"><input type="checkbox" '+(r.paid?'checked':'')+' onchange="togglePlannerPaid('+r.id+',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--me)"></td>';
+      html += '<td><select onchange="updateBillField('+r.id+',\'from_bank\',this.value)" style="background:transparent;border:none;color:var(--muted);font-size:12px;outline:none;cursor:pointer"><option value="">\u2014 bank \u2014</option>';
+      banks.forEach(function(b){ html += '<option value="'+esc(b)+'"'+(r.from_bank===b?' selected':'')+'>'+esc(b)+'</option>'; });
+      html += '</select></td>';
+      html += '<td><input type="text" value="'+esc(r.due||'')+'" placeholder="mm/dd" onchange="updateBillField('+r.id+',\'due\',this.value)" style="background:transparent;border:none;color:var(--muted);font-size:12px;width:52px;outline:none"></td>';
+      html += '<td><button class="btn btn-danger btn-sm" onclick="deletePlannerBill('+r.id+')">&#215;</button></td>';
+      html += '</tr>';
+    });
+  } else {
+    html += '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-style:italic">No items. Click + Add.</td></tr>';
+  }
+  html += '</tbody><tfoot><tr style="border-top:2px solid var(--border);font-weight:600">';
+  html += '<td>Subtotal</td><td></td><td class="mono" style="text-align:right">'+fmtDollar(subBal)+'</td><td class="mono" style="text-align:right;color:var(--me-light)">'+fmtDollar(subPay)+'</td><td colspan="4"></td>';
+  html += '</tr></tfoot></table></div></div>';
+  return html;
+}
+
+function openAddPlannerMonth(){
+  var now = new Date();
+  var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var months = plannerMonths();
+  var canCopy = months.length>0;
+  var html = '<div class="modal-title" style="color:var(--me-light)">Add New Month</div>';
+  html += '<div class="modal-sub">Each month is its own snapshot</div>';
+  html += '<div class="form-grid"><div class="form-group"><label>Month</label><select id="pm-month">';
+  monthNames.forEach(function(mn,i){ html += '<option value="'+mn+'"'+(i===now.getMonth()?' selected':'')+'>'+mn+'</option>'; });
+  html += '</select></div><div class="form-group"><label>Year</label><input type="number" id="pm-year" value="'+now.getFullYear()+'" min="2020" max="2040"></div></div>';
+  if(canCopy){
+    html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px;cursor:pointer;color:var(--muted)"><input type="checkbox" id="pm-copy" checked style="width:15px;height:15px;accent-color:var(--me)"> Copy recurring bills from current month (blank amounts)</label>';
+  } else {
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:8px">Your recurring &amp; one-time bills will be preloaded from your finance list.</div>';
+  }
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 20px;border-radius:8px;cursor:pointer" onclick="createPlannerMonth()">Create</button></div>';
+  openModal(html);
+}
+
+function createPlannerMonth(){
+  var mon = document.getElementById('pm-month').value;
+  var yr = document.getElementById('pm-year').value;
+  var label = mon+' '+yr;
+  var copyEl = document.getElementById('pm-copy');
+  var copy = copyEl ? copyEl.checked : false;
+  var existing = plannerMonths();
+  if(existing.find(function(m){return m.label===label;})){ alert('That month already exists.'); return; }
+  setSyncStatus('saving','Creating...');
+  var sortOrder = existing.length ? Math.max.apply(null, existing.map(function(m){return m.sort_order||0;}))+1 : 0;
+  var banks = plannerBanks();
+  var bankBals = {}; banks.forEach(function(b){ bankBals[b]=0; });
+  apiPost('me_bill_months',[{label:label, as_of:'', bank_bals:bankBals, sort_order:sortOrder}]).then(function(result){
+    var savedMonth = Array.isArray(result)?result[0]:result;
+    state.meBillMonths.push(savedMonth);
+    var toInsert = [];
+    if(copy && existing.length){
+      var curId = _plannerMonthId;
+      billsForMonth(curId).forEach(function(b){
+        toInsert.push({month_id:savedMonth.id, section:b.section, name:b.name, category:b.category, balance:0, to_pay:0, paid:false, from_bank:b.from_bank, due:'', sort_order:b.sort_order||0});
+      });
+    } else {
+      PLANNER_DEFAULT_REC.forEach(function(b,i){ toInsert.push({month_id:savedMonth.id, section:'rec', name:b.name, category:b.cat, balance:0, to_pay:0, paid:false, from_bank:'', due:'', sort_order:i}); });
+      PLANNER_DEFAULT_ONE.forEach(function(b,i){ toInsert.push({month_id:savedMonth.id, section:'one', name:b.name, category:b.cat, balance:0, to_pay:0, paid:false, from_bank:'', due:'', sort_order:i}); });
+    }
+    if(toInsert.length){
+      apiPost('me_bills', toInsert).then(function(rows){
+        (Array.isArray(rows)?rows:[rows]).forEach(function(r){ state.meBills.push(r); });
+        _plannerMonthId = savedMonth.id;
+        setSyncStatus('saved','Created'); closeModal(); renderMePlanner();
+      }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error adding bills: '+e.message); });
+    } else {
+      _plannerMonthId = savedMonth.id;
+      setSyncStatus('saved','Created'); closeModal(); renderMePlanner();
+    }
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+}
+
+function updatePlannerMonthField(mid, field, val){
+  var m = state.meBillMonths.find(function(x){return x.id===mid;});
+  if(m) m[field]=val;
+  var patch = {}; patch[field]=val;
+  apiPatch('me_bill_months', mid, patch).catch(function(e){ console.warn('save fail',e.message); });
+}
+
+function updateBankBal(mid, bank, val){
+  var m = state.meBillMonths.find(function(x){return x.id===mid;});
+  if(!m) return;
+  if(!m.bank_bals || typeof m.bank_bals!=='object') m.bank_bals={};
+  m.bank_bals[bank] = parseFloat(val)||0;
+  apiPatch('me_bill_months', mid, {bank_bals:m.bank_bals}).catch(function(e){ console.warn('save fail',e.message); });
+  renderMePlanner();
+}
+
+function deletePlannerMonth(mid){
+  if(!confirm('Delete this entire month and all its bills? This cannot be undone.')) return;
+  setSyncStatus('saving','Deleting...');
+  var billIds = billsForMonth(mid).map(function(b){return b.id;});
+  Promise.all(billIds.map(function(id){return apiDelete('me_bills',id).catch(function(){});})).then(function(){
+    return apiDelete('me_bill_months', mid);
+  }).then(function(){
+    state.meBills = state.meBills.filter(function(b){return b.month_id!==mid;});
+    state.meBillMonths = state.meBillMonths.filter(function(m){return m.id!==mid;});
+    _plannerMonthId = null;
+    setSyncStatus('saved','Deleted'); renderMePlanner();
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+}
+
+function addPlannerBill(mid, section){
+  var existing = billsForMonth(mid).filter(function(b){return b.section===section;});
+  var sortOrder = existing.length ? Math.max.apply(null, existing.map(function(b){return b.sort_order||0;}))+1 : 0;
+  apiPost('me_bills',[{month_id:mid, section:section, name:'', category:'', balance:0, to_pay:0, paid:false, from_bank:'', due:'', sort_order:sortOrder}]).then(function(result){
+    var saved = Array.isArray(result)?result[0]:result;
+    state.meBills.push(saved);
+    renderMePlanner();
+  }).catch(function(e){ alert('Error: '+e.message); });
+}
+
+function updateBillField(id, field, val){
+  var b = state.meBills.find(function(x){return x.id===id;});
+  if(b) b[field]=val;
+  var patch = {}; patch[field]=val;
+  apiPatch('me_bills', id, patch).then(function(){
+    if(field==='balance'||field==='to_pay') renderMePlanner();
+  }).catch(function(e){ console.warn('save fail',e.message); });
+}
+
+function deletePlannerBill(id){
+  var b = state.meBills.find(function(x){return x.id===id;});
+  if(b && b.ytd_expense_id){
+    apiDelete('me_expenses', b.ytd_expense_id).catch(function(){});
+    state.meExpenses = state.meExpenses.filter(function(e){return e.id!==b.ytd_expense_id;});
+  }
+  apiDelete('me_bills', id).then(function(){
+    state.meBills = state.meBills.filter(function(x){return x.id!==id;});
+    renderMePlanner();
+  }).catch(function(e){ alert('Error: '+e.message); });
+}
+
+function togglePlannerPaid(id, checked){
+  var b = state.meBills.find(function(x){return x.id===id;});
+  if(!b) return;
+  if(checked){
+    if(!b.name || !b.name.trim()){
+      alert('Give this bill a name before marking it paid (it needs a vendor name for the YTD report).');
+      renderMePlanner();
+      return;
+    }
+    var today = new Date().toISOString().slice(0,10);
+    var html = '<div class="modal-title" style="color:var(--me-light)">&#10003; Mark Paid</div>';
+    html += '<div class="modal-sub">'+esc(b.name)+'</div>';
+    html += '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">This logs a payment to <strong style="color:var(--white)">'+esc(b.name)+'</strong> in your Expenses &amp; YTD report.</div>';
+    html += '<div class="form-grid"><div class="form-group"><label>Amount paid</label><div class="input-prefix"><span>$</span><input type="number" step="0.01" id="pp-amount" value="'+(b.to_pay||'')+'" placeholder="0.00"></div></div>';
+    html += '<div class="form-group"><label>Date paid</label><input type="date" id="pp-date" value="'+today+'"></div></div>';
+    html += '<div class="form-group" style="margin-top:12px"><label>Category</label><select id="pp-category">';
+    var cats = state.settings.meCategories || ['Housing','Insurance','Phone','Health','Utilities','Food','Transportation','Subscriptions','Credit Card','Taxes','Other'];
+    cats.forEach(function(c){ html += '<option value="'+esc(c)+'"'+(b.category===c?' selected':'')+'>'+esc(c)+'</option>'; });
+    html += '</select></div>';
+    html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="cancelPlannerPaid('+id+')">Cancel</button><button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 20px;border-radius:8px;cursor:pointer" onclick="confirmPlannerPaid('+id+')">&#10003; Confirm Paid</button></div>';
+    openModal(html);
+  } else {
+    if(b.ytd_expense_id){
+      apiDelete('me_expenses', b.ytd_expense_id).catch(function(){});
+      state.meExpenses = state.meExpenses.filter(function(e){return e.id!==b.ytd_expense_id;});
+    }
+    b.paid = false; b.ytd_expense_id = null;
+    apiPatch('me_bills', id, {paid:false, ytd_expense_id:null}).catch(function(){});
+    renderMePlanner();
+  }
+}
+
+function cancelPlannerPaid(id){
+  closeModal();
+  renderMePlanner();
+}
+
+function confirmPlannerPaid(id){
+  var b = state.meBills.find(function(x){return x.id===id;});
+  if(!b) return;
+  var amount = parseFloat(document.getElementById('pp-amount').value)||0;
+  var date = document.getElementById('pp-date').value;
+  var category = document.getElementById('pp-category').value;
+  if(!date){ alert('Please pick a date.'); return; }
+  setSyncStatus('saving','Saving...');
+  var expData = { vendor:b.name.trim(), category:category, amount:amount, date:date, recurring:(b.section==='rec'), note:'From Bill Planner' };
+  apiPost('me_expenses',[expData]).then(function(result){
+    var savedExp = Array.isArray(result)?result[0]:result;
+    state.meExpenses.push(savedExp);
+    b.paid = true; b.ytd_expense_id = savedExp.id; b.category = category;
+    return apiPatch('me_bills', id, {paid:true, ytd_expense_id:savedExp.id, category:category});
+  }).then(function(){
+    setSyncStatus('saved','Logged to YTD'); closeModal(); renderMePlanner();
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+}
+
+function openPlannerSettings(){
+  if(!state.settings.plannerBanks) state.settings.plannerBanks = PLANNER_DEFAULT_BANKS.slice();
+  var banks = state.settings.plannerBanks;
+  var html = '<div class="modal-title" style="color:var(--me-light)">Bill Planner Setup</div>';
+  html += '<div class="modal-sub">Banks appear as cards and in the "From Bank" dropdown</div>';
+  html += '<div class="tag-list" style="margin-bottom:10px">';
+  banks.forEach(function(b,i){ html += '<span class="tag" style="border-color:var(--me-border);color:var(--me-light)">'+esc(b)+'<span class="tag-del" onclick="removePlannerBank('+i+')">&#215;</span></span>'; });
+  html += '</div><div class="tag-add-row"><input type="text" id="pb-input" placeholder="Add bank..." style="max-width:240px"><button class="btn btn-sm" style="background:var(--me);color:white;border:none" onclick="addPlannerBank()">Add</button></div>';
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Done</button></div>';
+  openModal(html);
+}
+function addPlannerBank(){
+  var inp = document.getElementById('pb-input');
+  var v = inp.value.trim(); if(!v) return;
+  if(!state.settings.plannerBanks) state.settings.plannerBanks = PLANNER_DEFAULT_BANKS.slice();
+  if(state.settings.plannerBanks.indexOf(v)<0) state.settings.plannerBanks.push(v);
+  saveSettings(); openPlannerSettings();
+}
+function removePlannerBank(idx){
+  state.settings.plannerBanks.splice(idx,1); saveSettings(); openPlannerSettings();
+}
 
 // ── CLOSING CHECKLIST ─────────────────────────
 var CHECKLIST_ITEMS = [
