@@ -3505,7 +3505,7 @@ function renderMePlanner(){
     var v = +(bals[b]||0);
     html += '<div class="card" style="margin-bottom:0;padding:14px 16px">';
     html += '<div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">'+esc(b)+'</div>';
-    html += '<div style="display:flex;align-items:baseline;gap:4px"><span style="font-size:18px;color:var(--muted)">$</span><input type="number" step="0.01" value="'+(v||'')+'" placeholder="0.00" onchange="updateBankBal('+m.id+',\''+esc(b).replace(/'/g,"\\'")+'\',this.value)" style="font-size:22px;font-weight:600;font-family:\'JetBrains Mono\',monospace;background:transparent;border:none;color:var(--white);width:100%;outline:none;padding:0"></div>';
+    html += '<div style="display:flex;align-items:baseline;gap:4px"><span style="font-size:18px;color:var(--muted)">$</span><input type="text" inputmode="decimal" value="'+(v||'')+'" placeholder="0.00" onchange="updateBankBal('+m.id+',\''+esc(b).replace(/'/g,"\\'")+'\',this.value)" style="font-size:22px;font-weight:500;font-family:\'JetBrains Mono\',monospace;background:transparent;border:none;color:var(--white);width:100%;outline:none;padding:0"></div>';
     html += '</div>';
   });
   html += '</div>';
@@ -3554,8 +3554,8 @@ function plannerSection(section, title, rows, banks, mid){
       html += '<option value="">\u2014</option>';
       cats.forEach(function(c){ html += '<option value="'+esc(c)+'"'+(r.category===c?' selected':'')+'>'+esc(c)+'</option>'; });
       html += '</select></td>';
-      html += '<td style="text-align:right"><input type="number" step="0.01" value="'+(r.balance||'')+'" placeholder="0.00" onchange="updateBillField('+r.id+',\'balance\',parseFloat(this.value)||0)" class="mono" style="background:transparent;border:none;color:var(--muted);font-size:13px;width:80px;outline:none;text-align:right"></td>';
-      html += '<td style="text-align:right"><input type="number" step="0.01" value="'+(r.to_pay||'')+'" placeholder="0.00" onchange="updateBillField('+r.id+',\'to_pay\',parseFloat(this.value)||0)" class="mono" style="background:transparent;border:none;color:var(--me-light);font-size:13px;font-weight:500;width:80px;outline:none;text-align:right"></td>';
+      html += '<td style="text-align:right"><input type="text" inputmode="decimal" value="'+(r.balance||'')+'" placeholder="0.00" onchange="updateBillField('+r.id+',\'balance\',parseFloat(String(this.value).replace(/[$,]/g,\'\'))||0)" class="mono" style="background:transparent;border:none;color:var(--muted);font-size:13px;width:90px;outline:none;text-align:right"></td>';
+      html += '<td style="text-align:right"><input type="text" inputmode="decimal" value="'+(r.to_pay||'')+'" placeholder="0.00" onchange="updateBillField('+r.id+',\'to_pay\',parseFloat(String(this.value).replace(/[$,]/g,\'\'))||0)" class="mono" style="background:transparent;border:none;color:var(--me-light);font-size:13px;font-weight:500;width:90px;outline:none;text-align:right"></td>';
       html += '<td style="text-align:center"><input type="checkbox" '+(r.paid?'checked':'')+' onchange="togglePlannerPaid('+r.id+',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--me)"></td>';
       html += '<td><select onchange="updateBillField('+r.id+',\'from_bank\',this.value)" style="background:transparent;border:none;color:var(--muted);font-size:12px;outline:none;cursor:pointer"><option value="">\u2014 bank \u2014</option>';
       banks.forEach(function(b){ html += '<option value="'+esc(b)+'"'+(r.from_bank===b?' selected':'')+'>'+esc(b)+'</option>'; });
@@ -3567,8 +3567,8 @@ function plannerSection(section, title, rows, banks, mid){
   } else {
     html += '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-style:italic">No items. Click + Add.</td></tr>';
   }
-  html += '</tbody><tfoot><tr style="border-top:2px solid var(--border);font-weight:600">';
-  html += '<td>Subtotal</td><td></td><td class="mono" style="text-align:right">'+fmtDollar(subBal)+'</td><td class="mono" style="text-align:right;color:var(--me-light)">'+fmtDollar(subPay)+'</td><td colspan="4"></td>';
+  html += '</tbody><tfoot><tr style="border-top:2px solid var(--border)">';
+  html += '<td style="font-weight:500">Subtotal</td><td></td><td class="mono" style="text-align:right;font-weight:400;font-size:14px;letter-spacing:0.5px">'+fmtDollar(subBal)+'</td><td class="mono" style="text-align:right;color:var(--me-light);font-weight:400;font-size:14px;letter-spacing:0.5px">'+fmtDollar(subPay)+'</td><td colspan="4"></td>';
   html += '</tr></tfoot></table></div></div>';
   return html;
 }
@@ -3641,7 +3641,7 @@ function updateBankBal(mid, bank, val){
   var m = state.meBillMonths.find(function(x){return x.id===mid;});
   if(!m) return;
   if(!m.bank_bals || typeof m.bank_bals!=='object') m.bank_bals={};
-  m.bank_bals[bank] = parseFloat(val)||0;
+  m.bank_bals[bank] = parseFloat(String(val).replace(/[$,]/g,''))||0;
   apiPatch('me_bill_months', mid, {bank_bals:m.bank_bals}).catch(function(e){ console.warn('save fail',e.message); });
   renderMePlanner();
 }
