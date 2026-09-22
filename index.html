@@ -426,9 +426,14 @@ function initApp() {
     state.loans = allLoans.filter(function(l){ return !l.deleted_at; });
     state.trash = allLoans.filter(function(l){ return !!l.deleted_at; });
     var settingsRows = results[1] || [];
-    settingsRows.forEach(function(row) {
-      try { if(row.key === 'main') state.settings = JSON.parse(row.value); } catch(e) {}
-    });
+    // Pick the newest 'main' row (handles accidental duplicates) and remember its id
+    var mainRows = settingsRows.filter(function(row){ return row.key === 'main'; });
+    if(mainRows.length){
+      mainRows.sort(function(a,b){ return (b.id||0)-(a.id||0); });
+      var newest = mainRows[0];
+      try { state.settings = JSON.parse(newest.value); } catch(e) {}
+      _settingsRowId = newest.id;
+    }
     // Load notes, dates, and JDZ deals independently so one failure doesn't break everything
     return Promise.all([
       apiGet('zt_notes', 'select=*').catch(function(){ return []; }),
@@ -1721,10 +1726,34 @@ function removeTag(key,idx){
   state.settings[key].splice(idx,1);
   saveSettings();renderSettings();
 }
+var _settingsRowId = null;
 function saveSettings(){
-  apiUpsert('zt_settings',[{key:'main',value:JSON.stringify(state.settings)}])
-    .then(function(){setSyncStatus('saved','Saved \u2713');})
-    .catch(function(e){setSyncStatus('error','Save failed');});
+  var payload = JSON.stringify(state.settings);
+  setSyncStatus('saving','Saving...');
+  // If we don't know the row id, look it up first so we never create duplicates
+  if(!_settingsRowId){
+    apiGet('zt_settings','select=id&key=eq.main').then(function(rows){
+      if(rows && rows.length){ _settingsRowId = rows[0].id; }
+      _doSaveSettings(payload);
+    }).catch(function(){ _doSaveSettings(payload); });
+    return;
+  }
+  _doSaveSettings(payload);
+}
+function _doSaveSettings(payload){
+  if(_settingsRowId){
+    apiPatch('zt_settings', _settingsRowId, {value:payload})
+      .then(function(){ setSyncStatus('saved','Saved \u2713'); })
+      .catch(function(e){ setSyncStatus('error','Save failed'); alert('Settings save failed: '+e.message); });
+  } else {
+    apiPost('zt_settings', [{key:'main', value:payload}])
+      .then(function(result){
+        var saved = Array.isArray(result)?result[0]:result;
+        if(saved && saved.id) _settingsRowId = saved.id;
+        setSyncStatus('saved','Saved \u2713');
+      })
+      .catch(function(e){ setSyncStatus('error','Save failed'); alert('Settings save failed: '+e.message); });
+  }
 }
 
 // ── BACKUP ───────────────────────────────────
@@ -3306,7 +3335,7 @@ function renderMeSettings() {
   // ── Accounts (checklist of planner banks) ──
   var accts = meAccountList();
   html += '<div class="card" style="margin-bottom:16px">';
-  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Expense Accounts</div><div class="card-sub">What an expense is charged to — credit cards and bank accounts</div></div></div>';
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Expense Accounts</div><div class="card-sub">What an expense is charged to — credit cards and bank accounts <span style="color:var(--green);font-weight:600">(v2)</span></div></div></div>';
   html += '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px">';
   accts.forEach(function(a,i){
     var isCard = a.type==='card';
