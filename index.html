@@ -56,6 +56,7 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--navy);co
 .table-wrap{overflow-x:auto;}
 table{width:100%;border-collapse:collapse;font-size:13px;}
 thead th{text-align:left;padding:10px 14px;color:var(--gold-dim);font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;border-bottom:1px solid var(--border);}
+table.sticky-head thead th{position:sticky;top:0;z-index:5;background:#162236;box-shadow:0 1px 0 var(--border);}
 tbody tr{border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.12s;cursor:pointer;}
 tbody tr:hover{background:rgba(201,168,76,0.05);}
 tbody td{padding:11px 14px;color:var(--white);vertical-align:middle;}
@@ -3318,7 +3319,7 @@ function renderMeExpenses() {
 
   html += '<div class="card"><div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Year-to-date spending by vendor</div><div class="card-sub">'+year+' &middot; '+filterLabel+'</div></div></div>';
   if(vendors.length){
-    html += '<div class="table-wrap" style="overflow-x:auto"><table><thead><tr><th style="min-width:150px">Vendor</th><th style="min-width:110px">Category</th>';
+    html += '<div class="table-wrap" style="overflow-x:auto"><table class="sticky-head"><thead><tr><th style="min-width:150px">Vendor</th><th style="min-width:110px">Category</th>';
     MONTHS_SHORT.forEach(function(m){ html += '<th style="min-width:52px">'+m+'</th>'; });
     html += '<th style="min-width:70px">YTD</th></tr></thead><tbody>';
     vendorData.forEach(function(v){
@@ -3927,7 +3928,7 @@ function plannerSection(section, title, rows, banks, mid){
 
   var html = '<div class="card" style="margin-bottom:14px">';
   html += '<div class="card-header" style="margin-bottom:0"><div><div class="card-title" style="color:var(--me-light)">'+title+'</div><div class="card-sub">'+rows.length+' item'+(rows.length!==1?'s':'')+'</div></div><button class="btn btn-sm" style="background:var(--me);color:white;border:none" onclick="addPlannerBill('+mid+',\''+section+'\')">+ Add</button></div>';
-  html += '<div class="table-wrap" style="margin-top:12px"><table><thead><tr>';
+  html += '<div class="table-wrap" style="margin-top:12px"><table class="sticky-head"><thead><tr>';
   html += '<th style="min-width:150px">'+nameLabel+'</th><th style="min-width:90px">Category</th><th class="mono" style="text-align:right">Balance</th><th class="mono" style="text-align:right">To Pay</th><th style="text-align:center">Paid</th><th>From Bank</th><th style="min-width:60px">Due</th><th></th>';
   html += '</tr></thead><tbody>';
 
