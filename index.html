@@ -3342,23 +3342,145 @@ function renderMeExpenses() {
   el.innerHTML = html;
 }
 
+var _vdVendor = null;  // vendor currently open in detail modal
 function openVendorDetail(vendorName) {
+  _vdVendor = vendorName;
   var txns = state.meExpenses.filter(function(e){return e.vendor===vendorName;}).sort(function(a,b){return (b.date||'')>(a.date||'')?1:-1;});
   var total = txns.reduce(function(s,e){return s+(+(e.amount||0));},0);
   var html = '<div class="modal-title" style="color:var(--me-light)">'+esc(vendorName)+'</div>';
   html += '<div class="modal-sub">'+txns.length+' payment'+(txns.length!==1?'s':'')+' &middot; '+fmtDollar(total)+' total</div>';
-  html += '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Account</th><th>Amount</th><th></th></tr></thead><tbody>';
+
+  // Bulk action bar (hidden until a row is selected)
+  html += '<div id="vd-bar" style="display:none;align-items:center;justify-content:space-between;background:rgba(139,92,246,0.14);border:1px solid var(--me-border);border-radius:9px;padding:9px 13px;margin-bottom:12px">';
+  html += '<div style="color:var(--me-light);font-size:13px"><span id="vd-count">0</span> selected</div>';
+  html += '<div style="display:flex;gap:8px">';
+  html += '<button class="btn btn-sm" style="background:var(--me);color:#fff;border:none" onclick="openBulkEdit()">Edit selected</button>';
+  html += '<button class="btn btn-sm" style="background:var(--red);color:#fff;border:none" onclick="bulkDeleteExpenses()">Delete selected</button>';
+  html += '<button class="btn btn-ghost btn-sm" onclick="vdClearSelection()">Clear</button>';
+  html += '</div></div>';
+
+  html += '<div class="table-wrap"><table><thead><tr>';
+  html += '<th style="width:32px;text-align:center"><input type="checkbox" id="vd-all" onclick="vdToggleAll(this.checked)" aria-label="Select all"></th>';
+  html += '<th>Date</th><th>Category</th><th>Account</th><th>Amount</th><th></th></tr></thead><tbody>';
   txns.forEach(function(e){
-    html += '<tr><td>'+fmtDate(e.date)+'</td><td><span class="badge-me">'+esc(e.category||'\u2014')+'</span>';
+    html += '<tr data-exp="'+e.id+'">';
+    html += '<td style="text-align:center"><input type="checkbox" class="vd-chk" value="'+e.id+'" onclick="event.stopPropagation();vdSync()"></td>';
+    html += '<td>'+fmtDate(e.date)+'</td><td><span class="badge-me">'+esc(e.category||'\u2014')+'</span>';
     if(e.property) html += ' <span class="badge-me" style="background:rgba(29,158,117,0.15);color:var(--jdz);border-color:rgba(29,158,117,0.3)" title="'+esc(e.property)+'">&#127968;</span>';
     html += '</td>';
     html += '<td style="font-size:11px;color:var(--muted)">'+esc(e.account||'\u2014')+(e.card_payment?' <span class="badge-me" style="background:rgba(201,168,76,0.15);color:var(--gold);border-color:rgba(201,168,76,0.3)" title="Card payment \u2014 excluded from spending">pay</span>':'')+'</td>';
     html += '<td class="mono" style="color:'+(e.card_payment?'var(--muted)':'var(--me-light)')+'">'+fmtDollar(e.amount)+'</td>';
-    html += '<td><button class="btn btn-ghost btn-sm" onclick="closeModal();openEditExpense('+e.id+')">Edit</button></td></tr>';
+    html += '<td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();closeModal();openEditExpense('+e.id+')">Edit</button></td></tr>';
   });
   html += '</tbody></table></div>';
   html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>';
   openModal(html);
+  // Clicking a row toggles its checkbox
+  var rows = document.querySelectorAll('#modal-content tr[data-exp]');
+  rows.forEach(function(r){ r.style.cursor='pointer'; r.onclick=function(){ var c=r.querySelector('.vd-chk'); c.checked=!c.checked; vdSync(); }; });
+}
+function vdSelectedIds(){
+  var ids=[];
+  document.querySelectorAll('#modal-content .vd-chk:checked').forEach(function(c){ ids.push(+c.value); });
+  return ids;
+}
+function vdSync(){
+  var n = vdSelectedIds().length;
+  var bar = document.getElementById('vd-bar');
+  if(bar) bar.style.display = n>0 ? 'flex' : 'none';
+  var cnt = document.getElementById('vd-count');
+  if(cnt) cnt.textContent = n;
+  var all = document.getElementById('vd-all');
+  var total = document.querySelectorAll('#modal-content .vd-chk').length;
+  if(all) all.checked = (n>0 && n===total);
+  // tint selected rows
+  document.querySelectorAll('#modal-content tr[data-exp]').forEach(function(r){
+    var c=r.querySelector('.vd-chk');
+    r.style.background = (c && c.checked) ? 'rgba(139,92,246,0.10)' : '';
+  });
+}
+function vdToggleAll(on){
+  document.querySelectorAll('#modal-content .vd-chk').forEach(function(c){ c.checked=on; });
+  vdSync();
+}
+function vdClearSelection(){ vdToggleAll(false); }
+
+function openBulkEdit(){
+  var ids = vdSelectedIds();
+  if(!ids.length) return;
+  var n = ids.length;
+  var html = '<div class="modal-title" style="color:var(--me-light)">Edit '+n+' transaction'+(n!==1?'s':'')+'</div>';
+  html += '<div class="modal-sub">'+esc(_vdVendor||'')+' &middot; changes apply to all '+n+'</div>';
+  html += '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--me-light);margin:6px 0 10px">What to change</div>';
+
+  // Category
+  html += '<label style="display:flex;align-items:center;gap:10px;background:rgba(139,92,246,0.06);border:1px solid var(--me-border);border-radius:8px;padding:11px 12px;margin-bottom:8px;cursor:pointer">';
+  html += '<input type="checkbox" id="be-cat-on"><span style="width:100px;font-size:13px">Category</span>';
+  html += '<select id="be-cat" style="flex:1">';
+  meCategoriesSorted().forEach(function(c){ html += '<option value="'+esc(c)+'">'+esc(c)+'</option>'; });
+  html += '</select></label>';
+
+  // Account
+  html += '<label style="display:flex;align-items:center;gap:10px;background:rgba(139,92,246,0.06);border:1px solid var(--me-border);border-radius:8px;padding:11px 12px;margin-bottom:8px;cursor:pointer">';
+  html += '<input type="checkbox" id="be-acct-on"><span style="width:100px;font-size:13px">Account</span>';
+  html += '<select id="be-acct" style="flex:1"><option value="">\u2014 account \u2014</option>';
+  meAccounts().forEach(function(a){ html += '<option value="'+esc(a)+'">'+esc(a)+'</option>'; });
+  html += '</select></label>';
+
+  // Property tag
+  html += '<label style="display:flex;align-items:center;gap:10px;background:rgba(139,92,246,0.06);border:1px solid var(--me-border);border-radius:8px;padding:11px 12px;margin-bottom:8px;cursor:pointer">';
+  html += '<input type="checkbox" id="be-prop-on"><span style="width:100px;font-size:13px">Property tag</span>';
+  html += '<select id="be-prop" style="flex:1"><option value="">\u2014 none \u2014</option>';
+  meProperties().forEach(function(p){ html += '<option value="'+esc(p)+'">'+esc(p)+'</option>'; });
+  html += '</select></label>';
+
+  // Card payment
+  html += '<label style="display:flex;align-items:center;gap:10px;background:rgba(139,92,246,0.06);border:1px solid var(--me-border);border-radius:8px;padding:11px 12px;margin-bottom:8px;cursor:pointer">';
+  html += '<input type="checkbox" id="be-pay-on"><span style="width:100px;font-size:13px">Card payment</span>';
+  html += '<select id="be-pay" style="flex:1"><option value="true">Mark as card payment</option><option value="false">Unmark card payment</option></select></label>';
+
+  html += '<div style="background:rgba(201,168,76,0.08);border-left:2px solid var(--gold);padding:8px 12px;margin:12px 0;color:var(--gold-light);font-size:11px;line-height:1.5">Amounts and dates aren\u2019t changed in bulk \u2014 those are unique to each payment. Only the fields you check get updated.</div>';
+
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="openVendorDetail(_vdVendor)">Cancel</button>';
+  html += '<button class="btn" style="background:var(--me);color:#fff;border:none" onclick="applyBulkEdit('+JSON.stringify(ids)+')">Apply to '+n+'</button></div>';
+  openModal(html);
+}
+function applyBulkEdit(ids){
+  var patch = {};
+  if(document.getElementById('be-cat-on').checked) patch.category = document.getElementById('be-cat').value;
+  if(document.getElementById('be-acct-on').checked) patch.account = document.getElementById('be-acct').value||null;
+  if(document.getElementById('be-prop-on').checked) patch.property = document.getElementById('be-prop').value||null;
+  if(document.getElementById('be-pay-on').checked) patch.card_payment = (document.getElementById('be-pay').value==='true');
+  if(!Object.keys(patch).length){ alert('Check at least one field to change.'); return; }
+  setSyncStatus('saving','Updating '+ids.length+'...');
+  var jobs = ids.map(function(id){
+    return apiPatch('me_expenses',id,patch).then(function(result){
+      var saved = Array.isArray(result)?result[0]:result;
+      var idx = state.meExpenses.findIndex(function(x){return x.id===id;});
+      if(idx>=0 && saved) state.meExpenses[idx]=saved;
+    });
+  });
+  Promise.all(jobs).then(function(){
+    setSyncStatus('saved','Updated \u2713');
+    showPage(currentPage);
+    openVendorDetail(_vdVendor);
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+}
+function bulkDeleteExpenses(){
+  var ids = vdSelectedIds();
+  if(!ids.length) return;
+  if(!confirm('Delete '+ids.length+' transaction'+(ids.length!==1?'s':'')+'? This cannot be undone.')) return;
+  setSyncStatus('saving','Deleting '+ids.length+'...');
+  var jobs = ids.map(function(id){
+    return apiDelete('me_expenses',id).then(function(){
+      state.meExpenses = state.meExpenses.filter(function(x){return x.id!==id;});
+    });
+  });
+  Promise.all(jobs).then(function(){
+    setSyncStatus('saved','Deleted \u2713');
+    showPage(currentPage);
+    openVendorDetail(_vdVendor);
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
 }
 
 function renderMeReports() {
