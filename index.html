@@ -3300,16 +3300,67 @@ function renderMeExpenses() {
   if(paymentTotal>0) html += '<div style="font-size:11px;color:var(--muted);margin-top:10px">Card payments excluded from spending this year: '+fmtDollar(paymentTotal)+'</div>';
   html += '</div>';
 
-  // ── Filter toggle (Option 1) + headline stats ──
+  // ── View tabs (plain words, no icons) ──
   function fbtn(key,label){
     var on = _expFilter===key;
-    return '<button onclick="_expFilter=\''+key+'\';renderMeExpenses()" style="font-size:12px;padding:6px 13px;border-radius:7px;border:1px solid '+(on?'var(--me)':'var(--border)')+';background:'+(on?'var(--me)':'transparent')+';color:'+(on?'white':'var(--muted)')+';cursor:pointer">'+label+'</button>';
+    return '<button onclick="_expFilter=\''+key+'\';renderMeExpenses()" style="font-size:12px;padding:6px 13px;border-radius:7px;border:1px solid '+(on?'var(--me)':'rgba(255,255,255,0.15)')+';background:'+(on?'var(--me)':'transparent')+';color:'+(on?'white':'var(--muted)')+';cursor:pointer">'+label+'</button>';
   }
-  html += '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">';
+  html += '<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">';
   html += fbtn('all','All');
-  html += fbtn('card','&#128179; On a card');
-  html += fbtn('bank','&#127974; Paid from bank');
+  html += fbtn('card','Charged to card');
+  html += fbtn('bank','Paid from bank');
+  html += fbtn('pay','Card payments');
+  html += fbtn('cum','Cumulative');
   html += '</div>';
+
+  // ── Card payments view: list every payoff, grouped by card account ──
+  if(_expFilter==='pay'){
+    var pays = state.meExpenses.filter(function(e){
+      return e.card_payment && e.date && new Date(e.date+'T12:00:00').getFullYear()===year;
+    }).sort(function(a,b){return (b.date||'')>(a.date||'')?1:-1;});
+    html += '<div class="stat-grid" style="grid-template-columns:repeat(2,1fr)">';
+    html += '<div class="stat-tile" style="border-color:var(--me-border)"><div class="stat-label">Card payments this year</div><div class="stat-value"><span style="color:var(--me-light)">'+fmtDollar(paymentTotal)+'</span></div><div class="stat-sub">paid toward your cards</div></div>';
+    html += '<div class="stat-tile"><div class="stat-label">Number of payments</div><div class="stat-value"><span style="color:var(--me-light)">'+pays.length+'</span></div><div class="stat-sub">payoff transactions</div></div>';
+    html += '</div>';
+    html += '<div class="card"><div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Credit card payments</div><div class="card-sub">'+year+' &middot; money sent from a bank to pay off a card</div></div></div>';
+    if(pays.length){
+      html += '<div class="table-wrap sticky-wrap"><table class="sticky-head"><thead><tr><th>Date</th><th>Vendor / Card</th><th>From bank</th><th>Note</th><th style="text-align:right">Amount</th></tr></thead><tbody>';
+      pays.forEach(function(e){
+        html += '<tr>';
+        html += '<td>'+fmtDate(e.date)+'</td>';
+        html += '<td><strong>'+esc(e.vendor||'—')+'</strong></td>';
+        html += '<td style="font-size:11px;color:var(--muted)">'+esc(e.account||'—')+'</td>';
+        html += '<td style="font-size:11px;color:var(--muted)">'+esc(e.note||'')+'</td>';
+        html += '<td class="mono" style="text-align:right;color:var(--me-light)">'+fmtDollar(e.amount)+'</td>';
+        html += '</tr>';
+      });
+      html += '<tr style="border-top:2px solid var(--border);font-weight:600"><td colspan="4">Total</td><td class="mono" style="text-align:right;color:var(--me-light)">'+fmtDollar(paymentTotal)+'</td></tr>';
+      html += '</tbody></table></div>';
+    } else {
+      html += '<div style="text-align:center;padding:50px;color:var(--muted)">No credit card payments logged for '+year+'. Mark an expense “This is a credit card payment” and it shows up here.</div>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  // ── Cumulative view: reconciliation of all three piles ──
+  if(_expFilter==='cum'){
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">';
+    html += '<div style="border:1px solid rgba(201,168,76,0.3);border-radius:9px;padding:14px;background:rgba(201,168,76,0.05)"><div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px">True spending (charge-based)</div><div class="mono" style="font-size:22px;color:var(--gold);margin-bottom:6px">'+fmtDollar(chargeBased)+'</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Card charges + bank debits, no payoffs. What you actually spent.</div></div>';
+    html += '<div style="border:1px solid rgba(45,198,83,0.3);border-radius:9px;padding:14px;background:rgba(45,198,83,0.05)"><div style="font-size:12px;color:var(--green);font-weight:600;margin-bottom:6px">Cash out of bank</div><div class="mono" style="font-size:22px;color:var(--green);margin-bottom:6px">'+fmtDollar(cashOut)+'</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Bank debits + card payoffs. The real drain on your accounts.</div></div>';
+    html += '</div>';
+    html += '<div class="card"><div class="card-title" style="color:var(--me-light);margin-bottom:12px">How it breaks down</div>';
+    function cumRow(label,amt,col,sub){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:rgba(255,255,255,0.03);border-left:3px solid '+col+';border-radius:0 7px 7px 0;margin-bottom:8px"><div><div style="color:var(--white);font-size:13px">'+label+'</div><div style="color:var(--muted);font-size:11px;margin-top:2px">'+sub+'</div></div><span class="mono" style="color:'+col+';font-size:15px">'+fmtDollar(amt)+'</span></div>';
+    }
+    html += cumRow('Charged to card', cardTotal, 'var(--gold)', 'subscriptions and purchases on a card');
+    html += cumRow('Paid from bank', bankTotal, 'var(--green)', 'direct debits straight from a bank');
+    html += cumRow('Card payments (payoffs)', paymentTotal, 'var(--me)', 'money sent to pay cards off — not extra spending');
+    html += '</div>';
+    el.innerHTML = html;
+    return;
+  }
 
   var filterLabel = _expFilter==='card' ? 'On a credit card' : _expFilter==='bank' ? 'Paid directly from bank' : 'All spending';
   html += '<div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">';
