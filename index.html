@@ -3237,7 +3237,15 @@ function vendorMonthlyTotalsFiltered(vendorName, group){
   return months;
 }
 
-var _expFilter = 'all'; // all | card | bank
+var _expFilter = 'all'; // all | card | bank | pay | cum
+function toggleCum(grp){
+  var body = document.getElementById('cum-'+grp+'-body');
+  var car = document.getElementById('cum-'+grp+'-car');
+  if(!body) return;
+  var open = body.style.display!=='none';
+  body.style.display = open ? 'none' : 'block';
+  if(car) car.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+}
 
 function renderMeExpenses() {
   var el = document.getElementById('content');
@@ -3350,13 +3358,60 @@ function renderMeExpenses() {
     html += '<div style="border:1px solid rgba(201,168,76,0.3);border-radius:9px;padding:14px;background:rgba(201,168,76,0.05)"><div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px">True spending (charge-based)</div><div class="mono" style="font-size:22px;color:var(--gold);margin-bottom:6px">'+fmtDollar(chargeBased)+'</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Card charges + bank debits, no payoffs. What you actually spent.</div></div>';
     html += '<div style="border:1px solid rgba(45,198,83,0.3);border-radius:9px;padding:14px;background:rgba(45,198,83,0.05)"><div style="font-size:12px;color:var(--green);font-weight:600;margin-bottom:6px">Cash out of bank</div><div class="mono" style="font-size:22px;color:var(--green);margin-bottom:6px">'+fmtDollar(cashOut)+'</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Bank debits + card payoffs. The real drain on your accounts.</div></div>';
     html += '</div>';
-    html += '<div class="card"><div class="card-title" style="color:var(--me-light);margin-bottom:12px">How it breaks down</div>';
-    function cumRow(label,amt,col,sub){
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:rgba(255,255,255,0.03);border-left:3px solid '+col+';border-radius:0 7px 7px 0;margin-bottom:8px"><div><div style="color:var(--white);font-size:13px">'+label+'</div><div style="color:var(--muted);font-size:11px;margin-top:2px">'+sub+'</div></div><span class="mono" style="color:'+col+';font-size:15px">'+fmtDollar(amt)+'</span></div>';
+    html += '<div class="card"><div class="card-title" style="color:var(--me-light);margin-bottom:4px">How it breaks down</div><div class="card-sub" style="margin-bottom:12px">Click a row to see the items that add up to it</div>';
+    // Build the vendor×month matrix for a given group ('card','bank','payment')
+    function cumMatrix(grp){
+      var vn={};
+      state.meExpenses.forEach(function(e){
+        if(!e.date || new Date(e.date+'T12:00:00').getFullYear()!==year) return;
+        if(expenseGroup(e)!==grp) return;
+        vn[e.vendor||'—']=true;
+      });
+      var names=Object.keys(vn).sort();
+      var colTot=[0,0,0,0,0,0,0,0,0,0,0,0];
+      var rows=names.map(function(n){
+        var m=[0,0,0,0,0,0,0,0,0,0,0,0];
+        state.meExpenses.forEach(function(e){
+          if((e.vendor||'—')!==n || !e.date) return;
+          var d=new Date(e.date+'T12:00:00');
+          if(d.getFullYear()!==year || expenseGroup(e)!==grp) return;
+          m[d.getMonth()]+=+(e.amount||0);
+        });
+        var tot=m.reduce(function(s,x){return s+x;},0);
+        m.forEach(function(x,i){colTot[i]+=x;});
+        return {name:n, months:m, tot:tot};
+      });
+      return {rows:rows, colTot:colTot};
     }
-    html += cumRow('Charged to card', cardTotal, 'var(--gold)', 'subscriptions and purchases on a card');
-    html += cumRow('Paid from bank', bankTotal, 'var(--green)', 'direct debits straight from a bank');
-    html += cumRow('Card payments (payoffs)', paymentTotal, 'var(--me)', 'money sent to pay cards off — not extra spending');
+    function cumPanel(grp,col){
+      var mx=cumMatrix(grp);
+      if(!mx.rows.length) return '<div style="padding:16px;color:var(--muted);font-size:12px">No items in this group for '+year+'.</div>';
+      var h='<div class="table-wrap" style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th style="min-width:150px">Vendor</th>';
+      MONTHS_SHORT.forEach(function(mn){ h+='<th style="min-width:50px;text-align:right">'+mn+'</th>'; });
+      h+='<th style="min-width:70px;text-align:right">YTD</th></tr></thead><tbody>';
+      mx.rows.forEach(function(r){
+        h+='<tr><td><strong>'+esc(r.name)+'</strong></td>';
+        r.months.forEach(function(x){ h+='<td class="mono" style="text-align:right;font-size:11px">'+(x?fmtDollar(x).replace('$',''):'—')+'</td>'; });
+        h+='<td class="mono" style="text-align:right;color:'+col+';font-weight:600">'+fmtDollar(r.tot).replace('$','')+'</td></tr>';
+      });
+      h+='<tr style="border-top:2px solid var(--border);font-weight:600"><td>Total</td>';
+      mx.colTot.forEach(function(x){ h+='<td class="mono" style="text-align:right;font-size:11px">'+(x?fmtDollar(x).replace('$',''):'—')+'</td>'; });
+      var gt=mx.colTot.reduce(function(s,x){return s+x;},0);
+      h+='<td class="mono" style="text-align:right;color:'+col+'">'+fmtDollar(gt).replace('$','')+'</td></tr>';
+      h+='</tbody></table></div>';
+      return h;
+    }
+    function cumRow(grp,label,amt,col,sub){
+      var pid='cum-'+grp;
+      var head='<div onclick="toggleCum(\''+grp+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:rgba(255,255,255,0.03);border-left:3px solid '+col+';border-radius:0 7px 7px 0;margin-bottom:0;cursor:pointer">'+
+        '<div style="display:flex;align-items:center;gap:10px"><span id="'+pid+'-car" style="color:'+col+';font-size:11px;transition:transform .15s;display:inline-block">▶</span><div><div style="color:var(--white);font-size:13px">'+label+'</div><div style="color:var(--muted);font-size:11px;margin-top:2px">'+sub+'</div></div></div>'+
+        '<span class="mono" style="color:'+col+';font-size:15px">'+fmtDollar(amt)+'</span></div>';
+      var body='<div id="'+pid+'-body" style="display:none;background:rgba(0,0,0,0.15);border-left:3px solid '+col+';border-radius:0 0 7px 7px;margin-bottom:8px;padding:4px 6px">'+cumPanel(grp,col)+'</div>';
+      return head+body;
+    }
+    html += cumRow('card','Charged to card', cardTotal, 'var(--gold)', 'subscriptions and purchases on a card');
+    html += cumRow('bank','Paid from bank', bankTotal, 'var(--green)', 'direct debits straight from a bank');
+    html += cumRow('payment','Card payments (payoffs)', paymentTotal, 'var(--me)', 'money sent to pay cards off — not extra spending');
     html += '</div>';
     el.innerHTML = html;
     return;
