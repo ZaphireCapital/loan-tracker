@@ -154,11 +154,13 @@ textarea{resize:vertical;min-height:80px;}
   .pipeline-cal-grid{grid-template-columns:1fr!important;}
 }
 @media print{
-  #sidebar,.topbar,.topbar-actions,.btn,.modal-overlay{display:none!important;}
+  #sidebar,.topbar,.topbar-actions,.btn,.modal-overlay,.no-print{display:none!important;}
   body{background:white;color:black;}
   .card{border:1px solid #ccc;box-shadow:none;background:white;}
   .stat-tile{background:#f5f5f5;border:1px solid #ccc;}
   thead th,tbody td{color:black;}
+  .wife-report{border:none!important;}
+  .wife-report *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
 }
 </style>
 </head>
@@ -3621,6 +3623,185 @@ function bulkDeleteExpenses(){
   }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
 }
 
+var MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+// True-spending test: exclude card payoffs, keep card charges + bank debits
+function isTrueSpend(e){ return expenseGroup(e)!=='payment'; }
+// Is this expense house/home related?
+function isHouseExpense(e){
+  if(e.property) return true; // tagged to a property (73 Weed Hill)
+  var c = (e.category||'').toLowerCase();
+  return c==='housing' || c==='utilities';
+}
+
+function buildWifeReport(inc, year){
+  var cfg = wifeReportCfg();
+  var mon = _wifeMonth;
+
+  // Monthly income (your Zaphire cut, by closing month) + JDZ by deal month
+  var incMonths = [0,0,0,0,0,0,0,0,0,0,0,0];
+  var jdzMonths = [0,0,0,0,0,0,0,0,0,0,0,0];
+  state.loans.forEach(function(l){
+    if(l.status==='Closed' && l.closing_date){
+      var d=new Date(l.closing_date+'T12:00:00');
+      if(d.getFullYear()===year) incMonths[d.getMonth()] += +(l.deric_amount||0);
+    }
+  });
+  (state.jdzDeals||[]).forEach(function(dl){
+    if(dl.payment_status==='Paid' && dl.deal_date){
+      var d=new Date(dl.deal_date+'T12:00:00');
+      if(d.getFullYear()===year) jdzMonths[d.getMonth()] += +(dl.amount||0);
+    }
+  });
+  var totalMonths = incMonths.map(function(v,i){ return v + jdzMonths[i]; });
+  var incThisMonth = totalMonths[mon];
+
+  // Spending this month (true spending) — overall, by category, house, top items
+  var spendMonth = 0, spendYtd = 0;
+  var catMap = {}, houseMap = {}, itemList = [];
+  state.meExpenses.forEach(function(e){
+    if(!e.date) return;
+    var d=new Date(e.date+'T12:00:00');
+    if(d.getFullYear()!==year) return;
+    if(!isTrueSpend(e)) return;
+    var amt=+(e.amount||0);
+    spendYtd += amt;
+    if(d.getMonth()===mon){
+      spendMonth += amt;
+      var c=e.category||'Other';
+      catMap[c]=(catMap[c]||0)+amt;
+      if(isHouseExpense(e)){ houseMap[c]=(houseMap[c]||0)+amt; }
+      itemList.push({vendor:e.vendor||'—', cat:c, amt:amt});
+    }
+  });
+
+  var incYtd = inc.total;
+  var netMonth = incThisMonth - spendMonth;
+  var netYtd = incYtd - spendYtd;
+
+  // ── Control panel (not printed) ──
+  var html = '<div class="card no-print" style="margin-bottom:18px;border-color:var(--me-border)">';
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Household report builder</div><div class="card-sub">Pick the month and check what to include, then Print to save a PDF for your wife</div></div></div>';
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
+  html += '<label style="font-size:12px;color:var(--muted)">Month:</label><select onchange="_wifeMonth=+this.value;renderMeReports()" style="background:var(--navy-mid);color:var(--white);border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:13px">';
+  MONTHS_FULL.forEach(function(m,i){ html += '<option value="'+i+'"'+(i===mon?' selected':'')+'>'+m+' '+year+'</option>'; });
+  html += '</select>';
+  html += '<button class="btn btn-sm" style="background:var(--me);color:#fff;border:none" onclick="window.print()">&#128424; Print / Save PDF</button>';
+  html += '</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
+  function tog(key,label){
+    var on=cfg[key];
+    return '<label style="display:flex;align-items:center;gap:7px;font-size:12px;color:'+(on?'var(--white)':'var(--muted)')+';background:'+(on?'rgba(139,92,246,0.1)':'transparent')+';border:1px solid '+(on?'var(--me-border)':'var(--border)')+';border-radius:7px;padding:7px 11px;cursor:pointer"><input type="checkbox" '+(on?'checked':'')+' onclick="toggleWifeSection(\''+key+'\')"> '+label+'</label>';
+  }
+  html += tog('summary','Summary tiles');
+  html += tog('incomeChart','Income month-to-month');
+  html += tog('categories','Spending by category');
+  html += tog('house','House & home section');
+  html += tog('topItems','Biggest items this month');
+  html += tog('jdz','JDZ income line');
+  html += tog('note','Footer note');
+  html += '</div></div>';
+
+  // ── The printable report ──
+  html += '<div class="card wife-report" style="margin-bottom:20px;background:#ffffff;color:#1a2230;border:1px solid #e5e7eb">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #8b5cf6;padding-bottom:12px;margin-bottom:18px">';
+  html += '<div><div style="font-size:20px;font-weight:600;color:#5b3fb5">Zaphire Household Summary</div><div style="font-size:12px;color:#6b7280">'+MONTHS_FULL[mon]+' '+year+' &middot; prepared by Deric</div></div>';
+  html += '<div style="text-align:right"><div style="font-size:11px;color:#6b7280">Net this month</div><div style="font-size:22px;font-weight:600;color:'+(netMonth>=0?'#1d9e75':'#dc2626')+';font-family:monospace">'+(netMonth>=0?'+':'')+fmtDollar(netMonth)+'</div></div>';
+  html += '</div>';
+
+  // Summary tiles
+  if(cfg.summary){
+    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">';
+    html += '<div style="background:#f3f0fe;border-radius:9px;padding:14px"><div style="font-size:11px;color:#6b7280">Income YTD</div><div style="font-size:19px;font-weight:600;color:#5b3fb5;font-family:monospace">'+fmtDollar(incYtd)+'</div><div style="font-size:11px;color:#9ca3af">'+MONTHS_FULL[mon]+': '+fmtDollar(incThisMonth)+'</div></div>';
+    html += '<div style="background:#fef6e7;border-radius:9px;padding:14px"><div style="font-size:11px;color:#6b7280">Spending YTD</div><div style="font-size:19px;font-weight:600;color:#9a6a12;font-family:monospace">'+fmtDollar(spendYtd)+'</div><div style="font-size:11px;color:#9ca3af">'+MONTHS_FULL[mon]+': '+fmtDollar(spendMonth)+'</div></div>';
+    html += '<div style="background:'+(netYtd>=0?'#e8f7ef':'#fdeaea')+';border-radius:9px;padding:14px"><div style="font-size:11px;color:#6b7280">Net YTD</div><div style="font-size:19px;font-weight:600;color:'+(netYtd>=0?'#1d9e75':'#dc2626')+';font-family:monospace">'+(netYtd>=0?'+':'')+fmtDollar(netYtd)+'</div><div style="font-size:11px;color:#9ca3af">in minus out</div></div>';
+    html += '</div>';
+  }
+
+  // Income month-to-month bars
+  if(cfg.incomeChart){
+    var maxInc = Math.max.apply(null, totalMonths.concat([1]));
+    html += '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Income month to month</div>';
+    html += '<div style="display:flex;align-items:flex-end;gap:6px;height:120px;padding:0 2px 4px;border-bottom:1px solid #e5e7eb;margin-bottom:4px">';
+    totalMonths.forEach(function(v,i){
+      var h = maxInc>0 ? Math.round(v/maxInc*100) : 0;
+      var isCur = i===mon;
+      html += '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%" title="'+MONTHS_FULL[i]+': '+fmtDollar(v)+'">';
+      if(v>0) html += '<div style="font-size:8px;color:#9ca3af;margin-bottom:2px">'+Math.round(v/1000)+'k</div>';
+      html += '<div style="width:100%;background:'+(isCur?'#6d4fc7':'#b9a9ec')+';height:'+h+'%;min-height:'+(v>0?'3px':'0')+';border-radius:3px 3px 0 0"></div></div>';
+    });
+    html += '</div><div style="display:flex;gap:6px;margin-bottom:20px">';
+    ['J','F','M','A','M','J','J','A','S','O','N','D'].forEach(function(l,i){ html += '<div style="flex:1;text-align:center;font-size:10px;color:'+(i===mon?'#5b3fb5':'#9ca3af')+';font-weight:'+(i===mon?'600':'400')+'">'+l+'</div>'; });
+    html += '</div>';
+  }
+
+  // Two-column: categories + house
+  var showCats = cfg.categories, showHouse = cfg.house;
+  if(showCats || showHouse){
+    html += '<div style="display:grid;grid-template-columns:'+((showCats&&showHouse)?'1fr 1fr':'1fr')+';gap:20px;margin-bottom:18px">';
+    if(showCats){
+      var catArr = Object.keys(catMap).map(function(k){return {name:k,amt:catMap[k]};}).sort(function(a,b){return b.amt-a.amt;});
+      html += '<div><div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Where the money went ('+MONTHS_FULL[mon].slice(0,3)+')</div><div style="font-size:12px">';
+      if(catArr.length){
+        catArr.forEach(function(c,i){ html += '<div style="display:flex;justify-content:space-between;padding:6px 0;'+(i<catArr.length-1?'border-bottom:1px solid #f0f0f0':'')+'"><span>'+esc(c.name)+'</span><span style="font-family:monospace">'+fmtDollar(c.amt)+'</span></div>'; });
+      } else { html += '<div style="color:#9ca3af;padding:10px 0">No spending recorded for this month.</div>'; }
+      html += '</div></div>';
+    }
+    if(showHouse){
+      var houseArr = Object.keys(houseMap).map(function(k){return {name:k,amt:houseMap[k]};}).sort(function(a,b){return b.amt-a.amt;});
+      var houseTot = houseArr.reduce(function(s,x){return s+x.amt;},0);
+      html += '<div><div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">House &amp; home</div>';
+      html += '<div style="background:#f3f0fe;border-radius:9px;padding:12px;font-size:12px">';
+      if(houseArr.length){
+        houseArr.forEach(function(c){ html += '<div style="display:flex;justify-content:space-between;padding:5px 0"><span>'+esc(c.name)+'</span><span style="font-family:monospace">'+fmtDollar(c.amt)+'</span></div>'; });
+        html += '<div style="display:flex;justify-content:space-between;padding:7px 0 0;margin-top:5px;border-top:1px solid #d9cff5;font-weight:600"><span>House total</span><span style="font-family:monospace;color:#5b3fb5">'+fmtDollar(houseTot)+'</span></div>';
+      } else { html += '<div style="color:#9ca3af;padding:6px 0">No house expenses this month.</div>'; }
+      html += '</div></div>';
+    }
+    html += '</div>';
+  }
+
+  // Biggest items
+  if(cfg.topItems){
+    var top = itemList.sort(function(a,b){return b.amt-a.amt;}).slice(0,6);
+    html += '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Biggest items this month</div>';
+    html += '<div style="font-size:12px;margin-bottom:6px">';
+    if(top.length){
+      top.forEach(function(t,i){ html += '<div style="display:flex;justify-content:space-between;padding:6px 0;'+(i<top.length-1?'border-bottom:1px solid #f0f0f0':'')+'"><span>'+esc(t.vendor)+' <span style="color:#9ca3af">&middot; '+esc(t.cat)+'</span></span><span style="font-family:monospace">'+fmtDollar(t.amt)+'</span></div>'; });
+    } else { html += '<div style="color:#9ca3af;padding:6px 0">Nothing recorded this month.</div>'; }
+    html += '</div>';
+  }
+
+  // Footer note
+  if(cfg.note){
+    var jdzLine = (inc.jdz>0) ? 'JDZ Logistics income this year: '+fmtDollar(inc.jdz)+'.' : 'JDZ Logistics income: not yet active — will appear here once deals are paid.';
+    html += '<div style="margin-top:18px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:10px;color:#9ca3af;line-height:1.6">'+(cfg.jdz?jdzLine+' ':'')+'Spending shown is true spending (credit-card payoffs excluded so nothing is counted twice). Income is Deric’s personal share.</div>';
+  }
+
+  html += '</div>'; // end wife-report
+  return html;
+}
+
+// ── Household report settings (which sections show) ──
+var WIFE_REPORT_DEFAULTS = {
+  summary:true, incomeChart:true, categories:true, house:true, topItems:true, jdz:true, note:true
+};
+function wifeReportCfg(){
+  if(!state.settings.wifeReport) state.settings.wifeReport = {};
+  var cfg = {};
+  Object.keys(WIFE_REPORT_DEFAULTS).forEach(function(k){
+    cfg[k] = (state.settings.wifeReport[k]!==undefined) ? state.settings.wifeReport[k] : WIFE_REPORT_DEFAULTS[k];
+  });
+  return cfg;
+}
+var _wifeMonth = new Date().getMonth(); // 0-11, current month default
+function toggleWifeSection(key){
+  var cfg = wifeReportCfg();
+  if(!state.settings.wifeReport) state.settings.wifeReport = {};
+  state.settings.wifeReport[key] = !cfg[key];
+  saveSettings();
+  renderMeReports();
+}
+
 function renderMeReports() {
   var el = document.getElementById('content');
   var inc = computeDericIncome();
@@ -3637,9 +3818,11 @@ function renderMeReports() {
   var net = inc.total - expYtd;
 
   var html = '';
+  html += buildWifeReport(inc, year);
 
-  // ── Earnings breakdown (Option A top) ──
-  html += '<div class="card" style="margin-bottom:20px;border-color:var(--me-border)">';
+  // ── Earnings breakdown (Option A top) — for your own eyes, not printed ──
+  html += '<div class="section-label no-print" style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin:8px 0 10px">Your detail (not included in the printed report)</div>';
+  html += '<div class="card no-print" style="margin-bottom:20px;border-color:var(--me-border)">';
   html += '<div class="card-title" style="margin-bottom:16px;color:var(--me-light)">&#128200; What Deric Earned This Year</div>';
   html += '<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:0">';
   html += '<div class="stat-tile" style="border-color:var(--me-border)"><div class="stat-label">Total Earned YTD</div><div class="stat-value"><span style="color:#3ddc84">'+fmtDollar(inc.total)+'</span></div></div>';
@@ -3656,8 +3839,8 @@ function renderMeReports() {
   }
   html += '</div>';
 
-  // ── Income → Expenses → Net flow (Option B) ──
-  html += '<div class="card" style="margin-bottom:0">';
+  // ── Income → Expenses → Net flow (Option B) — not printed ──
+  html += '<div class="card no-print" style="margin-bottom:0">';
   html += '<div class="card-title" style="margin-bottom:16px">Financial Summary</div>';
   // Income block
   html += '<div style="border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px">';
