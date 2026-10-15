@@ -3265,20 +3265,35 @@ function renderMeExpenses() {
   var cashOut = bankTotal + paymentTotal;    // Method B: everything that left a bank
 
   // ── Vendors visible under the current filter ──
+  // In the "All" view we include card payoffs too, so the table lists
+  // every payment; card/bank views still exclude payoffs.
+  var includePay = (_expFilter==='all');
   var vendorNames = {};
   state.meExpenses.forEach(function(e){
     if(!e.date || new Date(e.date+'T12:00:00').getFullYear()!==year) return;
     var g = expenseGroup(e);
-    if(g==='payment') return;
+    if(g==='payment' && !includePay) return;
     if(filterGroup && g!==filterGroup) return;
     vendorNames[e.vendor]=true;
   });
   var vendors = Object.keys(vendorNames).sort();
 
+  // Monthly totals for a vendor including ALL groups (used by the All view)
+  function vendorMonthlyTotalsAll(vn){
+    var m=[0,0,0,0,0,0,0,0,0,0,0,0];
+    state.meExpenses.forEach(function(e){
+      if(e.vendor!==vn || !e.date) return;
+      var d=new Date(e.date+'T12:00:00');
+      if(d.getFullYear()!==year) return;
+      m[d.getMonth()] += +(e.amount||0);
+    });
+    return m;
+  }
+
   var ytdTotal = 0;
   var monthTotals = [0,0,0,0,0,0,0,0,0,0,0,0];
   var vendorData = vendors.map(function(vn){
-    var months = vendorMonthlyTotalsFiltered(vn, filterGroup);
+    var months = includePay ? vendorMonthlyTotalsAll(vn) : vendorMonthlyTotalsFiltered(vn, filterGroup);
     var ytd = months.reduce(function(s,m){return s+m;},0);
     ytdTotal += ytd;
     months.forEach(function(m,i){monthTotals[i]+=m;});
