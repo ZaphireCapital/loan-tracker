@@ -230,6 +230,7 @@ textarea{resize:vertical;min-height:80px;}
         <div class="nav-item" id="nav-me-planner" onclick="showPage('me-planner')"><span class="icon">📋</span> Bill Planner</div>
         <div class="nav-item" id="nav-me-expenses" onclick="showPage('me-expenses')"><span class="icon">📤</span> Expenses &amp; YTD</div>
         <div class="nav-item" id="nav-me-reports" onclick="showPage('me-reports')"><span class="icon">📈</span> Reports</div>
+        <div class="nav-item" id="nav-me-tax" onclick="showPage('me-tax')"><span class="icon">🧾</span> Tax Prep</div>
       </div>
       <div class="nav-section">
         <div class="nav-label">Tools</div>
@@ -306,6 +307,8 @@ var state = {
   meVendors: [],
   meBillMonths: [],
   meBills: [],
+  meTaxItems: [],
+  meTaxProviders: [],
   settings: {
     loanTypes:['Purchase','Refinance','HELOC','FHA','VA','Conventional','Jumbo'],
     loanStatuses:['Active','Pending','Closed','On Hold','Cancelled'],
@@ -444,7 +447,9 @@ function initApp() {
       apiGet('me_expenses', 'select=*').catch(function(){ return []; }),
       apiGet('me_vendors', 'select=*').catch(function(){ return []; }),
       apiGet('me_bill_months', 'select=*').catch(function(){ return []; }),
-      apiGet('me_bills', 'select=*').catch(function(){ return []; })
+      apiGet('me_bills', 'select=*').catch(function(){ return []; }),
+      apiGet('me_tax_items', 'select=*').catch(function(){ return []; }),
+      apiGet('me_tax_providers', 'select=*').catch(function(){ return []; })
     ]);
   }).then(function(results) {
     (results[0]||[]).forEach(function(n) { state.closedNotes[n.loan_id] = n.note; });
@@ -459,6 +464,8 @@ function initApp() {
     state.meVendors = (results[4] || []);
     state.meBillMonths = (results[5] || []);
     state.meBills = (results[6] || []);
+    state.meTaxItems = (results[7] || []);
+    state.meTaxProviders = (results[8] || []);
     updateTrashBadge();
     updateDatesBadge();
     updateJdzTrashBadge();
@@ -640,7 +647,7 @@ function switchCompany(co) {
 
 function showPage(page) {
   currentPage = page;
-  var allNavIds = ['dashboard','loans','closed','earnings','settings','trash','dates','jdz-dashboard','jdz-deals','jdz-history','jdz-settings','jdz-trash','me-dashboard','me-planner','me-expenses','me-reports','me-settings'];
+  var allNavIds = ['dashboard','loans','closed','earnings','settings','trash','dates','jdz-dashboard','jdz-deals','jdz-history','jdz-settings','jdz-trash','me-dashboard','me-planner','me-expenses','me-reports','me-tax','me-settings'];
   allNavIds.forEach(function(p) {
     var el = document.getElementById('nav-' + p);
     if(el) el.className = 'nav-item';
@@ -660,7 +667,7 @@ function showPage(page) {
     earnings:'Earnings & Payouts', settings:'Settings', trash:'Trash', dates:'Important Dates',
     'jdz-dashboard':'JDZ Dashboard', 'jdz-deals':'Deals', 'jdz-history':'Deal History',
     'jdz-settings':'JDZ Settings', 'jdz-trash':'JDZ Trash',
-    'me-dashboard':'Personal Dashboard', 'me-planner':'Bill Planner', 'me-expenses':'Expenses & YTD', 'me-reports':'Reports', 'me-settings':'Personal Settings'
+    'me-dashboard':'Personal Dashboard', 'me-planner':'Bill Planner', 'me-expenses':'Expenses & YTD', 'me-reports':'Reports', 'me-tax':'Tax Prep', 'me-settings':'Personal Settings'
   };
   document.getElementById('page-title').textContent = titles[page] || page;
   var acts = document.getElementById('topbar-actions');
@@ -674,6 +681,8 @@ function showPage(page) {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddExpense()">+ Add Expense</button>';
   } else if(page==='me-planner') {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-outline btn-sm" onclick="openPlannerSettings()">&#9881; Setup</button> <button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddPlannerMonth()">+ Month</button>';
+  } else if(page==='me-tax') {
+    acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--green);color:#06240f;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="generateTaxEmail()">&#9993; Generate email</button>';
   } else {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button>';
   }
@@ -685,7 +694,8 @@ function showPage(page) {
     'jdz-dashboard':renderJdzDashboard, 'jdz-deals':renderJdzDeals,
     'jdz-history':renderJdzHistory, 'jdz-settings':renderJdzSettings, 'jdz-trash':renderJdzTrash,
     'me-dashboard':renderMeDashboard, 'me-expenses':renderMeExpenses,
-    'me-reports':renderMeReports, 'me-settings':renderMeSettings, 'me-planner':renderMePlanner
+    'me-reports':renderMeReports, 'me-settings':renderMeSettings, 'me-planner':renderMePlanner,
+    'me-tax':renderMeTax
   };
   setTimeout(function() {
     try { (renders[page]||renderDashboard)(); }
@@ -1783,11 +1793,14 @@ function downloadBackup() {
     safeGet('me_expenses'),
     safeGet('me_vendors'),
     safeGet('me_bill_months'),
-    safeGet('me_bills')
+    safeGet('me_bills'),
+    safeGet('me_tax_items'),
+    safeGet('me_tax_providers')
   ]).then(function(results) {
     var loans = results[0]||[], settings = results[1]||[], notes = results[2]||[],
         dates = results[3]||[], jdz = results[4]||[], meExp = results[5]||[],
-        meVend = results[6]||[], meMonths = results[7]||[], meBills = results[8]||[];
+        meVend = results[6]||[], meMonths = results[7]||[], meBills = results[8]||[],
+        meTaxItems = results[9]||[], meTaxProv = results[10]||[];
     var backup = {
       exported_at: new Date().toISOString(),
       exported_by: 'Zaphire Capital Business Manager',
@@ -1800,7 +1813,9 @@ function downloadBackup() {
         jdz_deals: jdz.length,
         me_expenses: meExp.length,
         me_bills: meBills.length,
-        me_bill_months: meMonths.length
+        me_bill_months: meMonths.length,
+        me_tax_items: meTaxItems.length,
+        me_tax_providers: meTaxProv.length
       },
       tables: {
         zt_loans:       loans,
@@ -1811,7 +1826,9 @@ function downloadBackup() {
         me_expenses:    meExp,
         me_vendors:     meVend,
         me_bill_months: meMonths,
-        me_bills:       meBills
+        me_bills:       meBills,
+        me_tax_items:   meTaxItems,
+        me_tax_providers: meTaxProv
       }
     };
 
@@ -3761,6 +3778,446 @@ function addMeProperty(){
 function removeMeProperty(idx){
   if(!state.settings.meProperties || !state.settings.meProperties.length) state.settings.meProperties = ['73 Weed Hill Ave.'];
   state.settings.meProperties.splice(idx,1); saveSettings(); renderMeSettings();
+}
+
+// ── TAX PREP ─────────────────────────────────
+var _taxYear = new Date().getFullYear() - 1;  // default to the year you file FOR (last year)
+var TAX_DEFAULT_SECTIONS = [
+  {label:'Deric docs', items:[
+    {label:'1099 – RFA Capital'},
+    {label:'1099 Div Int – Fidelity account'},
+    {label:'1099 – Team Zaphire & Associates', email_note:'Sole owner is my father; some deals finalized under this name and I received payments through it.'}
+  ]},
+  {label:'Julia docs', items:[
+    {label:'E-Trade Personal – 1099'},
+    {label:'E-Trade Personal – Transaction Supplement'},
+    {label:'E-Trade Ross – 1099 Div'},
+    {label:'E-Trade Ross – Supplemental'},
+    {label:'W-2 – Ross Stores'},
+    {label:'Ross statement of taxable income summary'}
+  ]},
+  {label:'JDZaphire Logistics', items:[
+    {label:'1099 – Open Door Management'},
+    {label:'Profit & Loss (Quicken)', email_note:'Electric, gas, car payment and internet were paid from this account at times.'}
+  ]},
+  {label:'Team Zaphire Inc (Zaphire Capital)', items:[
+    {label:'K-1'},
+    {label:'Federal 1120-S'},
+    {label:'NYS Corporate return'}
+  ]},
+  {label:'Joint', items:[
+    {label:'1098 1st mortgage – Roundpoint'},
+    {label:'1099 1st mortgage – Roundpoint'},
+    {label:'1098 2nd mortgage – HELOC'}
+  ]},
+  {label:'Donations', items:[
+    {label:'Donations', is_money:true}
+  ]},
+  {label:'Kids / Childcare', items:[
+    {label:'Summer camps', is_money:true},
+    {label:'Daycare'},
+    {label:'School tuition', is_money:true},
+    {label:'After-school programs'}
+  ]}
+];
+
+function taxYearsAvailable(){
+  var ys = {};
+  (state.meTaxItems||[]).forEach(function(r){ if(r.year) ys[r.year]=true; });
+  ys[_taxYear]=true;
+  return Object.keys(ys).map(Number).sort(function(a,b){return b-a;});
+}
+function taxItemsFor(year){ return (state.meTaxItems||[]).filter(function(r){return r.year===year;}); }
+function taxProvidersFor(itemId){
+  return (state.meTaxProviders||[]).filter(function(p){return p.item_id===itemId;})
+    .sort(function(a,b){return (a.sort_order||0)-(b.sort_order||0);});
+}
+
+function renderMeTax(){
+  var el = document.getElementById('content');
+  var year = _taxYear;
+  var rows = taxItemsFor(year);
+
+  // Empty year → offer to seed
+  if(!rows.length){
+    var years = taxYearsAvailable();
+    var html = '<div class="card" style="text-align:center;padding:50px;border-color:var(--me-border)">';
+    html += '<div class="card-title" style="color:var(--me-light);margin-bottom:8px">No tax checklist for '+year+' yet</div>';
+    html += '<div style="color:var(--muted);font-size:13px;margin-bottom:22px;line-height:1.6">Start from the standard framework (your usual sections and documents),<br>or copy everything forward from a prior year.</div>';
+    html += '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">';
+    html += '<button class="btn" style="background:var(--me);color:#fff;border:none" onclick="seedTaxYear('+year+')">Start from standard framework</button>';
+    var priors = years.filter(function(y){ return y!==year && taxItemsFor(y).length; });
+    priors.forEach(function(y){
+      html += '<button class="btn btn-outline" onclick="rollTaxYear('+y+','+year+')">Copy from '+y+'</button>';
+    });
+    html += '</div>';
+    html += '<div style="margin-top:22px">'+taxYearPicker(year)+'</div>';
+    html += '</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  var sections = rows.filter(function(r){return r.kind==='section';}).sort(function(a,b){return (a.sort_order||0)-(b.sort_order||0);});
+  var items = rows.filter(function(r){return r.kind==='item';});
+  var totalItems = items.length;
+  var gathered = items.filter(function(i){return i.gathered;}).length;
+  var pct = totalItems ? Math.round(gathered/totalItems*100) : 0;
+
+  var html = '';
+  // Header: year picker + progress
+  html += '<div class="card" style="margin-bottom:16px;border-color:var(--me-border)">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">';
+  html += '<div>'+taxYearPicker(year)+'</div>';
+  html += '<div style="display:flex;gap:8px;align-items:center">';
+  html += '<button class="btn btn-outline btn-sm" onclick="rollTaxYear('+year+','+(year+1)+')">Roll to '+(year+1)+'</button>';
+  html += '<button class="btn btn-outline btn-sm" onclick="addTaxSection('+year+')">+ Section</button>';
+  html += '</div></div>';
+  html += '<div style="display:flex;align-items:center;gap:12px;margin-top:14px">';
+  html += '<div style="flex:1;height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:var(--me)"></div></div>';
+  html += '<div style="color:var(--me-light);font-size:12px;white-space:nowrap">'+gathered+' of '+totalItems+' gathered</div>';
+  html += '</div></div>';
+
+  // Sections
+  sections.forEach(function(s){
+    var secItems = items.filter(function(i){return i.parent_id===s.id;}).sort(function(a,b){return (a.sort_order||0)-(b.sort_order||0);});
+    var done = secItems.filter(function(i){return i.gathered;}).length;
+    html += '<div class="card" style="margin-bottom:12px;padding:0;overflow:hidden">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:rgba(139,92,246,0.08)">';
+    html += '<div style="color:var(--me-light);font-size:14px;font-weight:600">'+esc(s.label)+'</div>';
+    html += '<div style="display:flex;align-items:center;gap:10px"><span style="color:var(--muted);font-size:11px">'+done+'/'+secItems.length+'</span>';
+    html += '<span style="color:var(--muted);font-size:12px;cursor:pointer" onclick="renameTaxSection('+s.id+')" title="Rename section">&#9998;</span>';
+    html += '<span style="color:var(--red);font-size:13px;cursor:pointer" onclick="deleteTaxSection('+s.id+')" title="Delete section">&times;</span></div>';
+    html += '</div>';
+    html += '<div>';
+    secItems.forEach(function(it){
+      html += taxItemRow(it);
+    });
+    html += '<div style="padding:9px 16px"><span style="color:var(--me-light);font-size:12px;cursor:pointer" onclick="addTaxItem('+s.id+','+year+')">+ Add item</span></div>';
+    html += '</div></div>';
+  });
+
+  el.innerHTML = html;
+}
+
+function taxYearPicker(year){
+  var years = taxYearsAvailable();
+  var h = '<select onchange="_taxYear=+this.value;renderMeTax()" style="background:var(--navy-mid);color:var(--white);border:1px solid var(--border);border-radius:7px;padding:6px 11px;font-size:13px;cursor:pointer">';
+  var has = years.indexOf(year)>=0;
+  if(!has) h += '<option value="'+year+'" selected>'+year+' (new)</option>';
+  years.forEach(function(y){ h += '<option value="'+y+'"'+(y===year?' selected':'')+'>Tax year '+y+'</option>'; });
+  // offer the next blank year too
+  var maxY = Math.max.apply(null, years);
+  if(year<=maxY) h += '<option value="'+(maxY+1)+'">Tax year '+(maxY+1)+' (new)</option>';
+  h += '</select>';
+  return h;
+}
+
+function taxItemRow(it){
+  var h = '<div style="border-top:0.5px solid rgba(255,255,255,0.05);padding:10px 16px">';
+  h += '<div style="display:flex;align-items:flex-start;gap:11px">';
+  // checkbox
+  h += '<span onclick="toggleTaxGathered('+it.id+')" style="cursor:pointer;font-size:17px;line-height:1.2;color:'+(it.gathered?'var(--green)':'var(--muted)')+'">'+(it.gathered?'☑':'☐')+'</span>';
+  h += '<div style="flex:1">';
+  h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+  h += '<span style="color:'+(it.gathered?'var(--white)':'var(--muted)')+';font-size:13px">'+esc(it.label)+'</span>';
+  if(it.is_money) h += '<span style="color:var(--gold);font-size:10px;border:0.5px solid rgba(201,168,76,0.4);border-radius:3px;padding:1px 6px">amounts</span>';
+  h += '</div>';
+  // email note (shows in email)
+  if(it.email_note) h += '<div style="color:var(--me-light);font-size:11px;margin-top:3px;line-height:1.5"><span style="opacity:.7">✎ in email:</span> '+esc(it.email_note)+'</div>';
+  // private note (app only)
+  if(it.private_note) h += '<div style="color:var(--muted);font-size:11px;margin-top:2px;line-height:1.5;font-style:italic"><span style="opacity:.7">🔒 private:</span> '+esc(it.private_note)+'</div>';
+  // providers (for money items)
+  if(it.is_money){
+    var provs = taxProvidersFor(it.id);
+    provs.forEach(function(p){
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:5px;padding:5px 9px;background:rgba(201,168,76,0.05);border:0.5px solid rgba(201,168,76,0.2);border-radius:6px">';
+      var meta = [];
+      if(p.ein) meta.push('EIN '+esc(p.ein));
+      if(p.address) meta.push(esc(p.address));
+      h += '<div style="font-size:11px;color:var(--white)"><strong>'+esc(p.name||'—')+'</strong>'+(meta.length?'<span style="color:var(--muted)"> — '+meta.join(' · ')+'</span>':'')+'</div>';
+      h += '<div style="display:flex;align-items:center;gap:8px"><span class="mono" style="color:var(--gold);font-size:12px">'+fmtDollar(p.amount||0)+'</span>';
+      h += '<span style="color:var(--me-light);font-size:11px;cursor:pointer" onclick="editTaxProvider('+p.id+')">edit</span>';
+      h += '<span style="color:var(--red);font-size:12px;cursor:pointer" onclick="deleteTaxProvider('+p.id+')">&times;</span></div>';
+      h += '</div>';
+    });
+    h += '<div style="margin-top:5px"><span style="color:var(--gold);font-size:11px;cursor:pointer" onclick="addTaxProvider('+it.id+')">+ Add provider</span></div>';
+  }
+  h += '</div>';
+  // row actions
+  h += '<div style="display:flex;gap:9px;align-items:center;white-space:nowrap">';
+  h += '<span style="color:var(--me-light);font-size:11px;cursor:pointer" onclick="editTaxItem('+it.id+')">edit</span>';
+  h += '<span style="color:var(--red);font-size:13px;cursor:pointer" onclick="deleteTaxItem('+it.id+')">&times;</span>';
+  h += '</div>';
+  h += '</div></div>';
+  return h;
+}
+
+// ── Tax data actions ──
+function seedTaxYear(year){
+  setSyncStatus('saving','Building '+year+'...');
+  var secPayload = TAX_DEFAULT_SECTIONS.map(function(s,i){
+    return {year:year, kind:'section', parent_id:null, label:s.label, gathered:false, email_note:null, private_note:null, is_money:false, sort_order:i};
+  });
+  apiPost('me_tax_items', secPayload).then(function(savedSecs){
+    state.meTaxItems = state.meTaxItems.concat(savedSecs);
+    var itemPayload = [];
+    TAX_DEFAULT_SECTIONS.forEach(function(s,si){
+      var sec = savedSecs[si];
+      s.items.forEach(function(it,ii){
+        itemPayload.push({year:year, kind:'item', parent_id:sec.id, label:it.label, gathered:false, email_note:it.email_note||null, private_note:null, is_money:!!it.is_money, sort_order:ii});
+      });
+    });
+    return apiPost('me_tax_items', itemPayload);
+  }).then(function(savedItems){
+    state.meTaxItems = state.meTaxItems.concat(savedItems);
+    setSyncStatus('saved','Ready ✓');
+    renderMeTax();
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+}
+
+function rollTaxYear(fromYear, toYear){
+  if(taxItemsFor(toYear).length){
+    if(!confirm('Tax year '+toYear+' already has items. Copy '+fromYear+' on top of it anyway?')) return;
+  }
+  var src = taxItemsFor(fromYear);
+  var srcSecs = src.filter(function(r){return r.kind==='section';}).sort(function(a,b){return (a.sort_order||0)-(b.sort_order||0);});
+  var srcItems = src.filter(function(r){return r.kind==='item';});
+  setSyncStatus('saving','Copying to '+toYear+'...');
+  var secPayload = srcSecs.map(function(s){
+    return {year:toYear, kind:'section', parent_id:null, label:s.label, gathered:false, email_note:null, private_note:null, is_money:false, sort_order:s.sort_order||0};
+  });
+  var secIdMap = {}; // oldSecId -> index
+  srcSecs.forEach(function(s,i){ secIdMap[s.id]=i; });
+  var newItemsMeta = []; // keep mapping to copy providers
+  apiPost('me_tax_items', secPayload).then(function(newSecs){
+    state.meTaxItems = state.meTaxItems.concat(newSecs);
+    var itemPayload = [];
+    srcItems.forEach(function(it){
+      var si = secIdMap[it.parent_id];
+      var newSec = (si!==undefined) ? newSecs[si] : null;
+      if(!newSec) return;
+      // email notes roll forward; private notes and gathered reset; amounts cleared (providers copied w/o amount)
+      itemPayload.push({year:toYear, kind:'item', parent_id:newSec.id, label:it.label, gathered:false, email_note:it.email_note||null, private_note:null, is_money:!!it.is_money, sort_order:it.sort_order||0});
+      newItemsMeta.push({oldId:it.id});
+    });
+    return apiPost('me_tax_items', itemPayload);
+  }).then(function(newItems){
+    state.meTaxItems = state.meTaxItems.concat(newItems);
+    // copy providers (names/ein/address kept; amount cleared so you re-enter this year's figures)
+    var provPayload = [];
+    newItems.forEach(function(ni, idx){
+      var oldId = newItemsMeta[idx].oldId;
+      taxProvidersFor(oldId).forEach(function(p){
+        provPayload.push({item_id:ni.id, name:p.name, amount:0, ein:p.ein||null, address:p.address||null, sort_order:p.sort_order||0});
+      });
+    });
+    if(!provPayload.length) return [];
+    return apiPost('me_tax_providers', provPayload);
+  }).then(function(newProvs){
+    if(newProvs && newProvs.length) state.meTaxProviders = state.meTaxProviders.concat(newProvs);
+    _taxYear = toYear;
+    setSyncStatus('saved','Copied ✓');
+    renderMeTax();
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+}
+
+function toggleTaxGathered(id){
+  var it = state.meTaxItems.find(function(x){return x.id===id;});
+  if(!it) return;
+  var val = !it.gathered;
+  it.gathered = val;
+  renderMeTax();
+  apiPatch('me_tax_items', id, {gathered:val}).catch(function(e){ alert('Error: '+e.message); });
+}
+
+function addTaxSection(year){
+  var name = prompt('New section name:');
+  if(!name) return;
+  var cur = taxItemsFor(year).filter(function(r){return r.kind==='section';});
+  setSyncStatus('saving','Saving...');
+  apiPost('me_tax_items',[{year:year, kind:'section', parent_id:null, label:name.trim(), gathered:false, email_note:null, private_note:null, is_money:false, sort_order:cur.length}]).then(function(r){
+    state.meTaxItems.push(r[0]); setSyncStatus('saved','Saved ✓'); renderMeTax();
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+}
+function renameTaxSection(id){
+  var s = state.meTaxItems.find(function(x){return x.id===id;});
+  if(!s) return;
+  var name = prompt('Rename section:', s.label);
+  if(!name) return;
+  s.label = name.trim();
+  apiPatch('me_tax_items', id, {label:s.label}).then(function(){renderMeTax();}).catch(function(e){alert('Error: '+e.message);});
+}
+function deleteTaxSection(id){
+  var kids = state.meTaxItems.filter(function(x){return x.kind==='item'&&x.parent_id===id;});
+  if(!confirm('Delete this section and its '+kids.length+' item(s)?')) return;
+  setSyncStatus('saving','Deleting...');
+  var jobs = [apiDelete('me_tax_items', id)];
+  kids.forEach(function(k){
+    jobs.push(apiDelete('me_tax_items', k.id));
+    taxProvidersFor(k.id).forEach(function(p){ jobs.push(apiDelete('me_tax_providers', p.id)); });
+  });
+  Promise.all(jobs).then(function(){
+    var killIds = {}; killIds[id]=true; kids.forEach(function(k){killIds[k.id]=true;});
+    state.meTaxItems = state.meTaxItems.filter(function(x){return !killIds[x.id];});
+    state.meTaxProviders = state.meTaxProviders.filter(function(p){return !killIds[p.item_id];});
+    setSyncStatus('saved','Deleted ✓'); renderMeTax();
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+}
+
+function addTaxItem(sectionId, year){ taxItemForm(null, sectionId, year); }
+function editTaxItem(id){ var it=state.meTaxItems.find(function(x){return x.id===id;}); if(it) taxItemForm(it, it.parent_id, it.year); }
+function taxItemForm(it, sectionId, year){
+  var isEdit = !!it;
+  var html = '<div class="modal-title" style="color:var(--me-light)">'+(isEdit?'Edit item':'Add item')+'</div>';
+  html += '<div class="form-group full" style="margin-bottom:12px"><label>Document / item name</label><input type="text" id="tx-label" value="'+(it?esc(it.label):'')+'" placeholder="e.g. 1099 – RFA Capital"></div>';
+  html += '<div class="form-group full" style="margin-bottom:12px"><label>Note that shows IN the email</label><textarea id="tx-enote" rows="2" placeholder="e.g. Sole owner is my father; deals paid through it" style="width:100%">'+(it&&it.email_note?esc(it.email_note):'')+'</textarea></div>';
+  html += '<div class="form-group full" style="margin-bottom:12px"><label>Private note (app only — never in the email)</label><textarea id="tx-pnote" rows="2" placeholder="Your own reminder" style="width:100%">'+(it&&it.private_note?esc(it.private_note):'')+'</textarea></div>';
+  html += '<label style="display:flex;align-items:center;gap:9px;margin-bottom:14px;cursor:pointer;font-size:13px;color:var(--white)"><input type="checkbox" id="tx-money"'+(it&&it.is_money?' checked':'')+'> This item has dollar amounts / providers (summer camps, schools, donations)</label>';
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button>';
+  html += '<button class="btn" style="background:var(--me);color:#fff;border:none" onclick="saveTaxItem('+(isEdit?it.id:'null')+','+(sectionId)+','+year+')">Save</button></div>';
+  openModal(html);
+}
+function saveTaxItem(id, sectionId, year){
+  var label = document.getElementById('tx-label').value.trim();
+  if(!label){ alert('Enter an item name.'); return; }
+  var data = {
+    label:label,
+    email_note:document.getElementById('tx-enote').value.trim()||null,
+    private_note:document.getElementById('tx-pnote').value.trim()||null,
+    is_money:document.getElementById('tx-money').checked
+  };
+  setSyncStatus('saving','Saving...');
+  if(id){
+    apiPatch('me_tax_items', id, data).then(function(r){
+      var saved=Array.isArray(r)?r[0]:r;
+      var idx=state.meTaxItems.findIndex(function(x){return x.id===id;});
+      if(idx>=0 && saved) state.meTaxItems[idx]=saved;
+      setSyncStatus('saved','Saved ✓'); closeModal(); renderMeTax();
+    }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+  } else {
+    var sibs = state.meTaxItems.filter(function(x){return x.kind==='item'&&x.parent_id===sectionId;});
+    data.year=year; data.kind='item'; data.parent_id=sectionId; data.gathered=false; data.sort_order=sibs.length;
+    apiPost('me_tax_items',[data]).then(function(r){
+      state.meTaxItems.push(r[0]); setSyncStatus('saved','Saved ✓'); closeModal(); renderMeTax();
+    }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+  }
+}
+function deleteTaxItem(id){
+  if(!confirm('Delete this item?')) return;
+  setSyncStatus('saving','Deleting...');
+  var jobs=[apiDelete('me_tax_items', id)];
+  taxProvidersFor(id).forEach(function(p){ jobs.push(apiDelete('me_tax_providers', p.id)); });
+  Promise.all(jobs).then(function(){
+    state.meTaxItems = state.meTaxItems.filter(function(x){return x.id!==id;});
+    state.meTaxProviders = state.meTaxProviders.filter(function(p){return p.item_id!==id;});
+    setSyncStatus('saved','Deleted ✓'); renderMeTax();
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+}
+
+// ── Providers (summer camps, schools, etc.) ──
+function addTaxProvider(itemId){ taxProviderForm(null, itemId); }
+function editTaxProvider(id){ var p=state.meTaxProviders.find(function(x){return x.id===id;}); if(p) taxProviderForm(p, p.item_id); }
+function taxProviderForm(p, itemId){
+  var isEdit=!!p;
+  var html='<div class="modal-title" style="color:var(--me-light)">'+(isEdit?'Edit provider':'Add provider')+'</div>';
+  html += '<div class="form-grid">';
+  html += '<div class="form-group full"><label>Provider name</label><input type="text" id="tp-name" value="'+(p?esc(p.name||''):'')+'" placeholder="e.g. JCC of Stamford"></div>';
+  html += '<div class="form-group"><label>Amount paid</label><input type="text" inputmode="decimal" id="tp-amt" value="'+(p&&p.amount?p.amount:'')+'" placeholder="0.00"></div>';
+  html += '<div class="form-group"><label>EIN (optional)</label><input type="text" id="tp-ein" value="'+(p?esc(p.ein||''):'')+'" placeholder="06-0646918"></div>';
+  html += '<div class="form-group full"><label>Address (optional)</label><input type="text" id="tp-addr" value="'+(p?esc(p.address||''):'')+'" placeholder="1035 Newfield Ave, Stamford CT 06905"></div>';
+  html += '</div>';
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button>';
+  html += '<button class="btn" style="background:var(--me);color:#fff;border:none" onclick="saveTaxProvider('+(isEdit?p.id:'null')+','+itemId+')">Save</button></div>';
+  openModal(html);
+}
+function saveTaxProvider(id, itemId){
+  var name=document.getElementById('tp-name').value.trim();
+  if(!name){ alert('Enter a provider name.'); return; }
+  var data={
+    name:name,
+    amount:parseFloat(String(document.getElementById('tp-amt').value).replace(/[$,]/g,''))||0,
+    ein:document.getElementById('tp-ein').value.trim()||null,
+    address:document.getElementById('tp-addr').value.trim()||null
+  };
+  setSyncStatus('saving','Saving...');
+  if(id){
+    apiPatch('me_tax_providers', id, data).then(function(r){
+      var saved=Array.isArray(r)?r[0]:r;
+      var idx=state.meTaxProviders.findIndex(function(x){return x.id===id;});
+      if(idx>=0 && saved) state.meTaxProviders[idx]=saved;
+      setSyncStatus('saved','Saved ✓'); closeModal(); renderMeTax();
+    }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+  } else {
+    var sibs=taxProvidersFor(itemId);
+    data.item_id=itemId; data.sort_order=sibs.length;
+    apiPost('me_tax_providers',[data]).then(function(r){
+      state.meTaxProviders.push(r[0]); setSyncStatus('saved','Saved ✓'); closeModal(); renderMeTax();
+    }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+  }
+}
+function deleteTaxProvider(id){
+  if(!confirm('Delete this provider?')) return;
+  apiDelete('me_tax_providers', id).then(function(){
+    state.meTaxProviders = state.meTaxProviders.filter(function(x){return x.id!==id;});
+    renderMeTax();
+  }).catch(function(e){ alert('Error: '+e.message); });
+}
+
+// ── Generate the email text ──
+function generateTaxEmail(){
+  var year=_taxYear;
+  var rows=taxItemsFor(year);
+  if(!rows.length){ alert('Nothing to generate for '+year+' yet.'); return; }
+  var secs=rows.filter(function(r){return r.kind==='section';}).sort(function(a,b){return (a.sort_order||0)-(b.sort_order||0);});
+  var items=rows.filter(function(r){return r.kind==='item';});
+
+  var lines=[];
+  lines.push('Subject: Taxes '+year);
+  lines.push('');
+  lines.push('Hi,');
+  lines.push('');
+  lines.push('Here are the documents and figures for '+year+'. Attachments are included with this email.');
+  lines.push('');
+  secs.forEach(function(s){
+    var secItems=items.filter(function(i){return i.parent_id===s.id;}).sort(function(a,b){return (a.sort_order||0)-(b.sort_order||0);});
+    if(!secItems.length) return;
+    lines.push(s.label.toUpperCase());
+    secItems.forEach(function(it){
+      var line='  - '+it.label;
+      if(it.email_note) line += ': '+it.email_note;
+      lines.push(line);
+      if(it.is_money){
+        taxProvidersFor(it.id).forEach(function(p){
+          var meta=[];
+          if(p.ein) meta.push('EIN '+p.ein);
+          if(p.address) meta.push(p.address);
+          lines.push('      • '+(p.name||'')+' — '+fmtDollar(p.amount||0)+(meta.length?'  ('+meta.join('; ')+')':''));
+        });
+      }
+    });
+    lines.push('');
+  });
+  lines.push('Let me know if you need anything else.');
+  lines.push('');
+  lines.push('Deric');
+  var text=lines.join('\n');
+
+  var html='<div class="modal-title" style="color:var(--me-light)">Tax email — '+year+'</div>';
+  html += '<div class="modal-sub">Copy this into Gmail, then attach your files. Email notes are included; private notes are not.</div>';
+  html += '<textarea id="tax-email-out" rows="18" style="width:100%;font-family:monospace;font-size:12px;line-height:1.6;background:#0a0a0a;color:#c9d4e0;border:1px solid var(--border);border-radius:8px;padding:12px">'+esc(text)+'</textarea>';
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+  html += '<button class="btn" style="background:var(--me);color:#fff;border:none" onclick="copyTaxEmail()">Copy to clipboard</button></div>';
+  openModal(html);
+}
+function copyTaxEmail(){
+  var ta=document.getElementById('tax-email-out');
+  if(!ta) return;
+  ta.select();
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(ta.value).then(function(){ setSyncStatus('saved','Copied ✓'); });
+    } else { document.execCommand('copy'); setSyncStatus('saved','Copied ✓'); }
+  }catch(e){ document.execCommand('copy'); }
 }
 
 // ── EXPENSE FORM ─────────────────────────────
