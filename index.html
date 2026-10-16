@@ -3633,9 +3633,10 @@ function isHouseExpense(e){
   return c==='housing' || c==='utilities';
 }
 
-function buildWifeReport(inc, year){
-  var cfg = wifeReportCfg();
-  var mon = _wifeMonth;
+function buildWifeReport(inc, year, cfg, mon, title){
+  cfg = cfg || wifeReportCfg();
+  if(mon===undefined||mon===null) mon = new Date().getMonth();
+  title = title || 'Zaphire Household Summary';
 
   // Monthly income (your Zaphire cut, by closing month) + JDZ by deal month
   var incMonths = [0,0,0,0,0,0,0,0,0,0,0,0];
@@ -3678,33 +3679,10 @@ function buildWifeReport(inc, year){
   var netMonth = incThisMonth - spendMonth;
   var netYtd = incYtd - spendYtd;
 
-  // ── Control panel (not printed) ──
-  var html = '<div class="card no-print" style="margin-bottom:18px;border-color:var(--me-border)">';
-  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Household report builder</div><div class="card-sub">Pick the month and check what to include, then Print to save a PDF for your wife</div></div></div>';
-  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
-  html += '<label style="font-size:12px;color:var(--muted)">Month:</label><select onchange="_wifeMonth=+this.value;renderMeReports()" style="background:var(--navy-mid);color:var(--white);border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:13px">';
-  MONTHS_FULL.forEach(function(m,i){ html += '<option value="'+i+'"'+(i===mon?' selected':'')+'>'+m+' '+year+'</option>'; });
-  html += '</select>';
-  html += '<button class="btn btn-sm" style="background:var(--me);color:#fff;border:none" onclick="window.print()">&#128424; Print / Save PDF</button>';
-  html += '</div>';
-  html += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
-  function tog(key,label){
-    var on=cfg[key];
-    return '<label style="display:flex;align-items:center;gap:7px;font-size:12px;color:'+(on?'var(--white)':'var(--muted)')+';background:'+(on?'rgba(139,92,246,0.1)':'transparent')+';border:1px solid '+(on?'var(--me-border)':'var(--border)')+';border-radius:7px;padding:7px 11px;cursor:pointer"><input type="checkbox" '+(on?'checked':'')+' onclick="toggleWifeSection(\''+key+'\')"> '+label+'</label>';
-  }
-  html += tog('summary','Summary tiles');
-  html += tog('incomeChart','Income month-to-month');
-  html += tog('categories','Spending by category');
-  html += tog('house','House & home section');
-  html += tog('topItems','Biggest items this month');
-  html += tog('jdz','JDZ income line');
-  html += tog('note','Footer note');
-  html += '</div></div>';
-
   // ── The printable report ──
-  html += '<div class="card wife-report" style="margin-bottom:20px;background:#ffffff;color:#1a2230;border:1px solid #e5e7eb">';
+  var html = '<div class="card wife-report" style="margin-bottom:20px;background:#ffffff;color:#1a2230;border:1px solid #e5e7eb">';
   html += '<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #8b5cf6;padding-bottom:12px;margin-bottom:18px">';
-  html += '<div><div style="font-size:20px;font-weight:600;color:#5b3fb5">Zaphire Household Summary</div><div style="font-size:12px;color:#6b7280">'+MONTHS_FULL[mon]+' '+year+' &middot; prepared by Deric</div></div>';
+  html += '<div><div style="font-size:20px;font-weight:600;color:#5b3fb5">'+esc(title)+'</div><div style="font-size:12px;color:#6b7280">'+MONTHS_FULL[mon]+' '+year+' &middot; prepared by Deric</div></div>';
   html += '<div style="text-align:right"><div style="font-size:11px;color:#6b7280">Net this month</div><div style="font-size:22px;font-weight:600;color:'+(netMonth>=0?'#1d9e75':'#dc2626')+';font-family:monospace">'+(netMonth>=0?'+':'')+fmtDollar(netMonth)+'</div></div>';
   html += '</div>';
 
@@ -3781,11 +3759,21 @@ function buildWifeReport(inc, year){
   return html;
 }
 
-// ── Household report settings (which sections show) ──
+// ── Saved custom reports ──
 var WIFE_REPORT_DEFAULTS = {
   summary:true, incomeChart:true, categories:true, house:true, topItems:true, jdz:true, note:true
 };
+var REPORT_SECTIONS = [
+  ['summary','Summary tiles'],
+  ['incomeChart','Income month-to-month'],
+  ['categories','Spending by category'],
+  ['house','House & home section'],
+  ['topItems','Biggest items this month'],
+  ['jdz','JDZ income line'],
+  ['note','Footer note']
+];
 function wifeReportCfg(){
+  // legacy single-report config (used only for first-time migration)
   if(!state.settings.wifeReport) state.settings.wifeReport = {};
   var cfg = {};
   Object.keys(WIFE_REPORT_DEFAULTS).forEach(function(k){
@@ -3793,21 +3781,62 @@ function wifeReportCfg(){
   });
   return cfg;
 }
-var _wifeMonth = new Date().getMonth(); // 0-11, current month default
-function toggleWifeSection(key){
-  var cfg = wifeReportCfg();
-  if(!state.settings.wifeReport) state.settings.wifeReport = {};
-  state.settings.wifeReport[key] = !cfg[key];
-  saveSettings();
-  renderMeReports();
+// Ensure the saved-reports array exists; migrate the old single report in once.
+function customReports(){
+  if(!state.settings.customReports){
+    state.settings.customReports = [{
+      id: Date.now(),
+      name: 'Household summary',
+      month: new Date().getMonth(),
+      cfg: wifeReportCfg()
+    }];
+    saveSettings();
+  }
+  return state.settings.customReports;
+}
+var _openReportId = null; // null = list view
+
+function renderMeReports(){
+  var el = document.getElementById('content');
+  var reports = customReports();
+  var open = _openReportId ? reports.find(function(r){return r.id===_openReportId;}) : null;
+  if(open) renderReportView(open);
+  else renderReportList(reports);
 }
 
-function renderMeReports() {
+// ── List view: all saved reports, open one at a time ──
+function renderReportList(reports){
+  var el = document.getElementById('content');
+  var html = '<div class="card" style="border-color:var(--me-border)">';
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--me-light)">Your reports</div><div class="card-sub">Build and name reports, then open one at a time</div></div><button class="btn btn-sm" style="background:var(--me);color:#fff;border:none" onclick="newReport()">+ New report</button></div>';
+  if(!reports.length){
+    html += '<div style="text-align:center;padding:40px;color:var(--muted)">No reports yet. Click “+ New report” to build one.</div>';
+  } else {
+    html += '<div style="display:flex;flex-direction:column;gap:9px;margin-top:6px">';
+    reports.forEach(function(r){
+      var onSecs = REPORT_SECTIONS.filter(function(s){return r.cfg[s[0]];}).map(function(s){return s[1];});
+      var summary = onSecs.slice(0,3).join(' · ') + (onSecs.length>3?' +'+(onSecs.length-3)+' more':'');
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px 15px;background:rgba(139,92,246,0.06);border:1px solid var(--me-border);border-radius:9px">';
+      html += '<div style="flex:1;cursor:pointer" onclick="openReport('+r.id+')"><div style="color:var(--white);font-size:14px;font-weight:500">'+esc(r.name)+'</div><div style="color:var(--muted);font-size:11px;margin-top:2px">'+esc(summary)+' · '+MONTHS_FULL[r.month]+'</div></div>';
+      html += '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0">';
+      html += '<button class="btn btn-sm" style="background:var(--me);color:#fff;border:none" onclick="openReport('+r.id+')">Open</button>';
+      html += '<button class="btn btn-ghost btn-sm" onclick="renameReport('+r.id+')" title="Rename">&#9998;</button>';
+      html += '<button class="btn btn-ghost btn-sm" onclick="duplicateReport('+r.id+')" title="Duplicate">&#128203;</button>';
+      html += '<button class="btn btn-danger btn-sm" onclick="deleteReport('+r.id+')" title="Delete">&times;</button>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ── Open view: one report, with inline edit controls + the detail cards ──
+function renderReportView(r){
   var el = document.getElementById('content');
   var inc = computeDericIncome();
   var year = new Date().getFullYear();
-  var expYtd = 0;
-  var recurring = 0, oneTime = 0;
+  var expYtd = 0, recurring = 0, oneTime = 0;
   state.meExpenses.forEach(function(e){
     if(e.date && new Date(e.date+'T12:00:00').getFullYear()===year){
       var amt = +(e.amount||0);
@@ -3818,9 +3847,29 @@ function renderMeReports() {
   var net = inc.total - expYtd;
 
   var html = '';
-  html += buildWifeReport(inc, year);
+  // Control bar (not printed)
+  html += '<div class="card no-print" style="margin-bottom:16px;border-color:var(--me-border)">';
+  html += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">';
+  html += '<button class="btn btn-ghost btn-sm" onclick="backToReportList()">&larr; All reports</button>';
+  html += '<div style="color:var(--me-light);font-size:15px;font-weight:600">'+esc(r.name)+'</div>';
+  html += '<label style="font-size:12px;color:var(--muted);margin-left:auto">Month:</label>';
+  html += '<select onchange="setReportMonth('+r.id+',+this.value)" style="background:var(--navy-mid);color:var(--white);border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:13px">';
+  MONTHS_FULL.forEach(function(m,i){ html += '<option value="'+i+'"'+(i===r.month?' selected':'')+'>'+m+' '+year+'</option>'; });
+  html += '</select>';
+  html += '<button class="btn btn-ghost btn-sm" onclick="renameReport('+r.id+')">&#9998; Rename</button>';
+  html += '<button class="btn btn-sm" style="background:var(--me);color:#fff;border:none" onclick="window.print()">&#128424; Print / Save PDF</button>';
+  html += '</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
+  REPORT_SECTIONS.forEach(function(s){
+    var on = r.cfg[s[0]];
+    html += '<label style="display:flex;align-items:center;gap:7px;font-size:12px;color:'+(on?'var(--white)':'var(--muted)')+';background:'+(on?'rgba(139,92,246,0.1)':'transparent')+';border:1px solid '+(on?'var(--me-border)':'var(--border)')+';border-radius:7px;padding:7px 11px;cursor:pointer"><input type="checkbox" '+(on?'checked':'')+' onclick="toggleReportSection('+r.id+',\''+s[0]+'\')"> '+s[1]+'</label>';
+  });
+  html += '</div></div>';
 
-  // ── Earnings breakdown (Option A top) — for your own eyes, not printed ──
+  // The report itself
+  html += buildWifeReport(inc, year, r.cfg, r.month, r.name);
+
+  // Detail cards (not printed)
   html += '<div class="section-label no-print" style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin:8px 0 10px">Your detail (not included in the printed report)</div>';
   html += '<div class="card no-print" style="margin-bottom:20px;border-color:var(--me-border)">';
   html += '<div class="card-title" style="margin-bottom:16px;color:var(--me-light)">&#128200; What Deric Earned This Year</div>';
@@ -3861,6 +3910,53 @@ function renderMeReports() {
   html += '</div>';
 
   el.innerHTML = html;
+}
+
+// ── Report actions ──
+function _saveReports(){ saveSettings(); }
+function openReport(id){ _openReportId = id; renderMeReports(); }
+function backToReportList(){ _openReportId = null; renderMeReports(); }
+function setReportMonth(id, mon){
+  var r = customReports().find(function(x){return x.id===id;});
+  if(r){ r.month = mon; _saveReports(); renderMeReports(); }
+}
+function toggleReportSection(id, key){
+  var r = customReports().find(function(x){return x.id===id;});
+  if(r){ r.cfg[key] = !r.cfg[key]; _saveReports(); renderMeReports(); }
+}
+function newReport(){
+  var name = prompt('Name this report:', 'New report');
+  if(name===null) return;
+  name = name.trim(); if(!name) name = 'Untitled report';
+  var cfg = {}; REPORT_SECTIONS.forEach(function(s){ cfg[s[0]] = true; });
+  var r = { id: Date.now(), name:name, month:new Date().getMonth(), cfg:cfg };
+  customReports().push(r);
+  _saveReports();
+  _openReportId = r.id;
+  renderMeReports();
+}
+function renameReport(id){
+  var r = customReports().find(function(x){return x.id===id;});
+  if(!r) return;
+  var name = prompt('Rename report:', r.name);
+  if(name===null) return;
+  name = name.trim(); if(!name) return;
+  r.name = name; _saveReports(); renderMeReports();
+}
+function duplicateReport(id){
+  var r = customReports().find(function(x){return x.id===id;});
+  if(!r) return;
+  var copy = { id: Date.now(), name: r.name+' (copy)', month: r.month, cfg: JSON.parse(JSON.stringify(r.cfg)) };
+  customReports().push(copy);
+  _saveReports(); renderMeReports();
+}
+function deleteReport(id){
+  var r = customReports().find(function(x){return x.id===id;});
+  if(!r) return;
+  if(!confirm('Delete the report “'+r.name+'”?')) return;
+  state.settings.customReports = customReports().filter(function(x){return x.id!==id;});
+  if(_openReportId===id) _openReportId = null;
+  _saveReports(); renderMeReports();
 }
 
 function renderMeSettings() {
