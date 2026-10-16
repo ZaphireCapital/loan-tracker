@@ -3726,7 +3726,7 @@ function buildWifeReport(inc, year){
       var h = maxInc>0 ? Math.round(v/maxInc*100) : 0;
       var isCur = i===mon;
       html += '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%" title="'+MONTHS_FULL[i]+': '+fmtDollar(v)+'">';
-      if(v>0) html += '<div style="font-size:8px;color:#9ca3af;margin-bottom:2px">'+Math.round(v/1000)+'k</div>';
+      if(v>0) html += '<div style="font-size:8px;color:#4b5563;margin-bottom:2px;white-space:nowrap;font-family:monospace">'+fmtDollar(v)+'</div>';
       html += '<div style="width:100%;background:'+(isCur?'#6d4fc7':'#b9a9ec')+';height:'+h+'%;min-height:'+(v>0?'3px':'0')+';border-radius:3px 3px 0 0"></div></div>';
     });
     html += '</div><div style="display:flex;gap:6px;margin-bottom:20px">';
@@ -4769,7 +4769,8 @@ function renderMePlanner(){
   months.forEach(function(mm){ html += '<option value="'+mm.id+'"'+(mm.id===m.id?' selected':'')+'>'+esc(mm.label)+'</option>'; });
   html += '</select>';
   html += '<input type="text" value="'+esc(m.as_of||'')+'" placeholder="As of date..." onchange="updatePlannerMonthField('+m.id+',\'as_of\',this.value)" style="max-width:130px;font-size:12px">';
-  html += '<button class="btn btn-danger btn-sm" onclick="deletePlannerMonth('+m.id+')" style="margin-left:auto">&#128465; Delete month</button>';
+  html += '<button class="btn btn-sm" style="background:var(--me);color:#fff;border:none;margin-left:auto" onclick="duplicatePlannerMonth('+m.id+')" title="Make a new dated version of this snapshot with current amounts">&#128203; Duplicate snapshot</button>';
+  html += '<button class="btn btn-danger btn-sm" onclick="deletePlannerMonth('+m.id+')">&#128465; Delete</button>';
   html += '</div>';
 
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px">';
@@ -4871,7 +4872,9 @@ function createPlannerMonth(){
   var copyEl = document.getElementById('pm-copy');
   var copy = copyEl ? copyEl.checked : false;
   var existing = plannerMonths();
-  if(existing.find(function(m){return m.label===label;})){ alert('That month already exists.'); return; }
+  if(existing.find(function(m){return m.label===label;})){
+    if(!confirm('A snapshot named "'+label+'" already exists. Create another with the same name anyway?')) return;
+  }
   setSyncStatus('saving','Creating...');
   var sortOrder = existing.length ? Math.max.apply(null, existing.map(function(m){return m.sort_order||0;}))+1 : 0;
   var banks = plannerBanks();
@@ -4907,6 +4910,42 @@ function updatePlannerMonthField(mid, field, val){
   if(m) m[field]=val;
   var patch = {}; patch[field]=val;
   apiPatch('me_bill_months', mid, patch).catch(function(e){ console.warn('save fail',e.message); });
+}
+
+// Duplicate the current snapshot WITH its current amounts + paid status,
+// as a new dated version (e.g. "October 15"). Great for re-checking what's
+// left after some bills have been paid and numbers changed.
+function duplicatePlannerMonth(mid){
+  var src = state.meBillMonths.find(function(x){return x.id===mid;});
+  if(!src) return;
+  var def = src.label || '';
+  var label = prompt('Name this new snapshot (use the date, e.g. "October 15, 2026"):', def);
+  if(label===null) return;
+  label = label.trim();
+  if(!label){ alert('Enter a name / date for the snapshot.'); return; }
+  setSyncStatus('saving','Duplicating...');
+  var existing = plannerMonths();
+  var sortOrder = existing.length ? Math.max.apply(null, existing.map(function(m){return m.sort_order||0;}))+1 : 0;
+  var bankBals = (src.bank_bals && typeof src.bank_bals==='object') ? JSON.parse(JSON.stringify(src.bank_bals)) : {};
+  apiPost('me_bill_months',[{label:label, as_of:'', bank_bals:bankBals, sort_order:sortOrder}]).then(function(result){
+    var savedMonth = Array.isArray(result)?result[0]:result;
+    state.meBillMonths.push(savedMonth);
+    var toInsert = billsForMonth(mid).map(function(b){
+      return {month_id:savedMonth.id, section:b.section, name:b.name, category:b.category,
+              balance:(+(b.balance||0)), to_pay:(+(b.to_pay||0)), paid:!!b.paid,
+              from_bank:b.from_bank||'', due:b.due||'', sort_order:b.sort_order||0};
+    });
+    if(!toInsert.length){
+      _plannerMonthId = savedMonth.id;
+      setSyncStatus('saved','Duplicated ✓'); renderMePlanner();
+      return;
+    }
+    apiPost('me_bills', toInsert).then(function(rows){
+      (Array.isArray(rows)?rows:[rows]).forEach(function(r){ state.meBills.push(r); });
+      _plannerMonthId = savedMonth.id;
+      setSyncStatus('saved','Duplicated ✓'); renderMePlanner();
+    }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error copying bills: '+e.message); });
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
 }
 
 function updateBankBal(mid, bank, val){
