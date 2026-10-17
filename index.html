@@ -311,6 +311,7 @@ var state = {
   meBills: [],
   meTaxItems: [],
   meTaxProviders: [],
+  meVendorBalances: [],
   settings: {
     loanTypes:['Purchase','Refinance','HELOC','FHA','VA','Conventional','Jumbo'],
     loanStatuses:['Active','Pending','Closed','On Hold','Cancelled'],
@@ -451,7 +452,8 @@ function initApp() {
       apiGet('me_bill_months', 'select=*').catch(function(){ return []; }),
       apiGet('me_bills', 'select=*').catch(function(){ return []; }),
       apiGet('me_tax_items', 'select=*').catch(function(){ return []; }),
-      apiGet('me_tax_providers', 'select=*').catch(function(){ return []; })
+      apiGet('me_tax_providers', 'select=*').catch(function(){ return []; }),
+      apiGet('me_vendor_balances', 'select=*').catch(function(){ return []; })
     ]);
   }).then(function(results) {
     (results[0]||[]).forEach(function(n) { state.closedNotes[n.loan_id] = n.note; });
@@ -468,6 +470,7 @@ function initApp() {
     state.meBills = (results[6] || []);
     state.meTaxItems = (results[7] || []);
     state.meTaxProviders = (results[8] || []);
+    state.meVendorBalances = (results[9] || []);
     updateTrashBadge();
     updateDatesBadge();
     updateJdzTrashBadge();
@@ -1797,12 +1800,13 @@ function downloadBackup() {
     safeGet('me_bill_months'),
     safeGet('me_bills'),
     safeGet('me_tax_items'),
-    safeGet('me_tax_providers')
+    safeGet('me_tax_providers'),
+    safeGet('me_vendor_balances')
   ]).then(function(results) {
     var loans = results[0]||[], settings = results[1]||[], notes = results[2]||[],
         dates = results[3]||[], jdz = results[4]||[], meExp = results[5]||[],
         meVend = results[6]||[], meMonths = results[7]||[], meBills = results[8]||[],
-        meTaxItems = results[9]||[], meTaxProv = results[10]||[];
+        meTaxItems = results[9]||[], meTaxProv = results[10]||[], meVendBals = results[11]||[];
     var backup = {
       exported_at: new Date().toISOString(),
       exported_by: 'Zaphire Capital Business Manager',
@@ -1817,7 +1821,8 @@ function downloadBackup() {
         me_bills: meBills.length,
         me_bill_months: meMonths.length,
         me_tax_items: meTaxItems.length,
-        me_tax_providers: meTaxProv.length
+        me_tax_providers: meTaxProv.length,
+        me_vendor_balances: meVendBals.length
       },
       tables: {
         zt_loans:       loans,
@@ -1830,7 +1835,8 @@ function downloadBackup() {
         me_bill_months: meMonths,
         me_bills:       meBills,
         me_tax_items:   meTaxItems,
-        me_tax_providers: meTaxProv
+        me_tax_providers: meTaxProv,
+        me_vendor_balances: meVendBals
       }
     };
 
@@ -3513,11 +3519,74 @@ function openVendorDetail(vendorName) {
     html += '<td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();closeModal();openEditExpense('+e.id+')">Edit</button></td></tr>';
   });
   html += '</tbody></table></div>';
+
+  // ── Balance history (dated balances for this vendor) ──
+  var bals = vendorBalances(vendorName);
+  html += '<div style="margin-top:18px;border:1px solid var(--me-border);border-radius:10px;padding:14px;background:rgba(139,92,246,0.04)">';
+  html += '<div style="color:var(--me-light);font-size:13px;font-weight:600;margin-bottom:2px">Balance history</div>';
+  html += '<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Record what\u2019s owed and the date \u2014 reports pull the balance as of the report month</div>';
+  if(bals.length){
+    html += '<div style="font-size:12px;margin-bottom:10px">';
+    bals.forEach(function(b){
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid rgba(255,255,255,0.06)">';
+      html += '<span style="color:var(--muted)">'+fmtDate(b.as_of)+'</span>';
+      html += '<span style="display:flex;gap:12px;align-items:center"><span class="mono" style="color:var(--white)">'+fmtDollar(b.balance)+'</span><span style="color:var(--red);font-size:13px;cursor:pointer" onclick="deleteVendorBalance('+b.id+')">&times;</span></span>';
+      html += '</div>';
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="color:var(--muted);font-size:12px;padding:4px 0 10px">No balances recorded yet.</div>';
+  }
+  var todayStr = new Date().toISOString().slice(0,10);
+  html += '<div style="display:flex;gap:8px;align-items:center;padding-top:10px;border-top:0.5px solid rgba(255,255,255,0.08)">';
+  html += '<input type="date" id="vb-date" value="'+todayStr+'" style="flex:1;font-size:12px">';
+  html += '<input type="text" id="vb-amt" inputmode="decimal" placeholder="Balance $" style="flex:1;font-size:12px" class="mono">';
+  html += '<button class="btn btn-sm" style="background:var(--me);color:#fff;border:none" onclick="addVendorBalance(\''+esc(vendorName).replace(/'/g,"\\'")+'\')">Add</button>';
+  html += '</div></div>';
+
   html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>';
   openModal(html);
   // Clicking a row toggles its checkbox
   var rows = document.querySelectorAll('#modal-content tr[data-exp]');
   rows.forEach(function(r){ r.style.cursor='pointer'; r.onclick=function(){ var c=r.querySelector('.vd-chk'); c.checked=!c.checked; vdSync(); }; });
+}
+
+// ── Vendor balance history ──
+function vendorBalances(vendorName){
+  return (state.meVendorBalances||[]).filter(function(b){return b.vendor===vendorName;})
+    .sort(function(a,b){return (b.as_of||'')>(a.as_of||'')?1:-1;}); // newest first
+}
+// Balance for a vendor as of the end of a given year+month (0-11):
+// the most recent entry dated on or before the last day of that month.
+function vendorBalanceAsOf(vendorName, year, mon){
+  var cutoff = new Date(year, mon+1, 0); // last day of that month
+  var cutoffStr = cutoff.getFullYear()+'-'+String(cutoff.getMonth()+1).padStart(2,'0')+'-'+String(cutoff.getDate()).padStart(2,'0');
+  var elig = (state.meVendorBalances||[]).filter(function(b){ return b.vendor===vendorName && b.as_of && b.as_of<=cutoffStr; })
+    .sort(function(a,b){return (b.as_of||'')>(a.as_of||'')?1:-1;});
+  return elig.length ? elig[0] : null;
+}
+function addVendorBalance(vendorName){
+  var dateEl = document.getElementById('vb-date');
+  var amtEl = document.getElementById('vb-amt');
+  var as_of = dateEl ? dateEl.value : '';
+  var amt = parseFloat(String(amtEl?amtEl.value:'').replace(/[$,]/g,''))||0;
+  if(!as_of){ alert('Pick a date for the balance.'); return; }
+  setSyncStatus('saving','Saving...');
+  apiPost('me_vendor_balances',[{vendor:vendorName, as_of:as_of, balance:amt}]).then(function(r){
+    var saved=Array.isArray(r)?r[0]:r;
+    state.meVendorBalances.push(saved);
+    setSyncStatus('saved','Saved \u2713');
+    openVendorDetail(vendorName); // refresh popup
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+}
+function deleteVendorBalance(id){
+  if(!confirm('Delete this balance entry?')) return;
+  var rec = (state.meVendorBalances||[]).find(function(b){return b.id===id;});
+  var vn = rec ? rec.vendor : null;
+  apiDelete('me_vendor_balances', id).then(function(){
+    state.meVendorBalances = state.meVendorBalances.filter(function(b){return b.id!==id;});
+    if(vn) openVendorDetail(vn);
+  }).catch(function(e){ alert('Error: '+e.message); });
 }
 function vdSelectedIds(){
   var ids=[];
@@ -3749,6 +3818,30 @@ function buildWifeReport(inc, year, cfg, mon, title){
     html += '</div>';
   }
 
+  // Outstanding balances (as of the report month)
+  if(cfg.balances){
+    var vendorsWithBal = {};
+    (state.meVendorBalances||[]).forEach(function(b){ if(b.vendor) vendorsWithBal[b.vendor]=true; });
+    var balRows = Object.keys(vendorsWithBal).map(function(vn){
+      var rec = vendorBalanceAsOf(vn, year, mon);
+      return rec ? {name:vn, as_of:rec.as_of, bal:+(rec.balance||0)} : null;
+    }).filter(function(x){return x;}).sort(function(a,b){return b.bal-a.bal;});
+    var balTot = balRows.reduce(function(s,x){return s+x.bal;},0);
+    html += '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:4px">Outstanding balances</div>';
+    html += '<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">What was still owed as of '+MONTHS_FULL[mon]+' '+year+'</div>';
+    if(balRows.length){
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px"><thead><tr style="color:#9ca3af;text-align:left;font-size:10px;text-transform:uppercase"><th style="padding:4px 0">Vendor</th><th style="padding:4px 0">As of</th><th style="padding:4px 0;text-align:right">Balance</th></tr></thead><tbody>';
+      balRows.forEach(function(r){
+        html += '<tr style="border-top:1px solid #f0f0f0"><td style="padding:7px 0;color:#1a2230">'+esc(r.name)+'</td><td style="padding:7px 0;color:#6b7280">'+fmtDate(r.as_of)+'</td><td style="padding:7px 0;text-align:right;font-family:monospace">'+fmtDollar(r.bal)+'</td></tr>';
+      });
+      html += '<tr style="border-top:2px solid #d9cff5;font-weight:600"><td style="padding:8px 0;color:#5b3fb5">Total owed</td><td></td><td style="padding:8px 0;text-align:right;font-family:monospace;color:#5b3fb5">'+fmtDollar(balTot)+'</td></tr>';
+      html += '</tbody></table>';
+    } else {
+      html += '<div style="color:#9ca3af;font-size:12px;padding:6px 0 14px">No balances recorded on or before this month. Add balances from a vendor on the Expenses &amp; YTD page.</div>';
+    }
+    html += '<div style="margin-bottom:18px"></div>';
+  }
+
   // Footer note
   if(cfg.note){
     var jdzLine = (inc.jdz>0) ? 'JDZ Logistics income this year: '+fmtDollar(inc.jdz)+'.' : 'JDZ Logistics income: not yet active — will appear here once deals are paid.';
@@ -3761,7 +3854,7 @@ function buildWifeReport(inc, year, cfg, mon, title){
 
 // ── Saved custom reports ──
 var WIFE_REPORT_DEFAULTS = {
-  summary:true, incomeChart:true, categories:true, house:true, topItems:true, jdz:true, note:true
+  summary:true, incomeChart:true, categories:true, house:true, topItems:true, balances:false, jdz:true, note:true
 };
 var REPORT_SECTIONS = [
   ['summary','Summary tiles'],
@@ -3769,6 +3862,7 @@ var REPORT_SECTIONS = [
   ['categories','Spending by category'],
   ['house','House & home section'],
   ['topItems','Biggest items this month'],
+  ['balances','Outstanding balances'],
   ['jdz','JDZ income line'],
   ['note','Footer note']
 ];
