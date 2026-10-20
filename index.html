@@ -215,6 +215,7 @@ textarea{resize:vertical;min-height:80px;}
         <div class="nav-label jdz-label">JDZ Logistics</div>
         <div class="nav-item" id="nav-jdz-dashboard" onclick="showPage('jdz-dashboard')"><span class="icon">📊</span> Dashboard</div>
         <div class="nav-item" id="nav-jdz-deals" onclick="showPage('jdz-deals')"><span class="icon">💼</span> Deals</div>
+        <div class="nav-item" id="nav-jdz-expenses" onclick="showPage('jdz-expenses')"><span class="icon">🧾</span> Expenses</div>
         <div class="nav-item" id="nav-jdz-history" onclick="showPage('jdz-history')"><span class="icon">📋</span> History</div>
       </div>
       <div class="nav-section">
@@ -305,6 +306,7 @@ var state = {
   datesTrash: [],
   jdzDeals: [],
   jdzTrash: [],
+  jdzExpenses: [],
   meExpenses: [],
   meVendors: [],
   meBillMonths: [],
@@ -323,7 +325,8 @@ var state = {
     dericSplitPct:32.5,
     julesSplitPct:32.5,
     jdzDealTypes:['Consulting','Notary','Document Prep','Software Creation','Company Reorganization'],
-    jdzClients:[]
+    jdzClients:[],
+    jdzExpenseCats:['Mileage / gas','Dues / licensing','Office supplies','Marketing','Insurance','Software / subscriptions','Travel','Meals','Professional fees','Other']
   },
   closedNotes: {}
 };
@@ -453,7 +456,8 @@ function initApp() {
       apiGet('me_bills', 'select=*').catch(function(){ return []; }),
       apiGet('me_tax_items', 'select=*').catch(function(){ return []; }),
       apiGet('me_tax_providers', 'select=*').catch(function(){ return []; }),
-      apiGet('me_vendor_balances', 'select=*').catch(function(){ return []; })
+      apiGet('me_vendor_balances', 'select=*').catch(function(){ return []; }),
+      apiGet('jdz_expenses', 'select=*').catch(function(){ return []; })
     ]);
   }).then(function(results) {
     (results[0]||[]).forEach(function(n) { state.closedNotes[n.loan_id] = n.note; });
@@ -471,6 +475,8 @@ function initApp() {
     state.meTaxItems = (results[7] || []);
     state.meTaxProviders = (results[8] || []);
     state.meVendorBalances = (results[9] || []);
+    var allJdzExp = results[10] || [];
+    state.jdzExpenses = allJdzExp.filter(function(e){ return !e.deleted_at; });
     updateTrashBadge();
     updateDatesBadge();
     updateJdzTrashBadge();
@@ -652,7 +658,7 @@ function switchCompany(co) {
 
 function showPage(page) {
   currentPage = page;
-  var allNavIds = ['dashboard','loans','closed','earnings','settings','trash','dates','jdz-dashboard','jdz-deals','jdz-history','jdz-settings','jdz-trash','me-dashboard','me-planner','me-expenses','me-reports','me-tax','me-settings'];
+  var allNavIds = ['dashboard','loans','closed','earnings','settings','trash','dates','jdz-dashboard','jdz-deals','jdz-expenses','jdz-history','jdz-settings','jdz-trash','me-dashboard','me-planner','me-expenses','me-reports','me-tax','me-settings'];
   allNavIds.forEach(function(p) {
     var el = document.getElementById('nav-' + p);
     if(el) el.className = 'nav-item';
@@ -670,7 +676,7 @@ function showPage(page) {
   var titles = {
     dashboard:'Dashboard', loans:'Active Loans', closed:'Closed Files',
     earnings:'Earnings & Payouts', settings:'Settings', trash:'Trash', dates:'Important Dates',
-    'jdz-dashboard':'JDZ Dashboard', 'jdz-deals':'Deals', 'jdz-history':'Deal History',
+    'jdz-dashboard':'JDZ Dashboard', 'jdz-deals':'Deals', 'jdz-expenses':'JDZ Expenses', 'jdz-history':'Deal History',
     'jdz-settings':'JDZ Settings', 'jdz-trash':'JDZ Trash',
     'me-dashboard':'Personal Dashboard', 'me-planner':'Bill Planner', 'me-expenses':'Expenses & YTD', 'me-reports':'Reports', 'me-tax':'Tax Prep', 'me-settings':'Personal Settings'
   };
@@ -682,6 +688,8 @@ function showPage(page) {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-gold btn-sm" onclick="openAddDate()">+ Add Date</button>';
   } else if(page==='jdz-deals'||page==='jdz-dashboard') {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--jdz);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddDeal()">+ Add Deal</button>';
+  } else if(page==='jdz-expenses') {
+    acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--jdz);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddJdzExpense()">+ Add Expense</button>';
   } else if(page==='me-expenses'||page==='me-dashboard') {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddExpense()">+ Add Expense</button>';
   } else if(page==='me-planner') {
@@ -696,7 +704,7 @@ function showPage(page) {
   var renders = {
     dashboard:renderDashboard, loans:renderLoans, closed:renderClosed,
     earnings:renderEarnings, settings:renderSettings, trash:renderTrash, dates:renderDates,
-    'jdz-dashboard':renderJdzDashboard, 'jdz-deals':renderJdzDeals,
+    'jdz-dashboard':renderJdzDashboard, 'jdz-deals':renderJdzDeals, 'jdz-expenses':renderJdzExpenses,
     'jdz-history':renderJdzHistory, 'jdz-settings':renderJdzSettings, 'jdz-trash':renderJdzTrash,
     'me-dashboard':renderMeDashboard, 'me-expenses':renderMeExpenses,
     'me-reports':renderMeReports, 'me-settings':renderMeSettings, 'me-planner':renderMePlanner,
@@ -1801,12 +1809,14 @@ function downloadBackup() {
     safeGet('me_bills'),
     safeGet('me_tax_items'),
     safeGet('me_tax_providers'),
-    safeGet('me_vendor_balances')
+    safeGet('me_vendor_balances'),
+    safeGet('jdz_expenses')
   ]).then(function(results) {
     var loans = results[0]||[], settings = results[1]||[], notes = results[2]||[],
         dates = results[3]||[], jdz = results[4]||[], meExp = results[5]||[],
         meVend = results[6]||[], meMonths = results[7]||[], meBills = results[8]||[],
-        meTaxItems = results[9]||[], meTaxProv = results[10]||[], meVendBals = results[11]||[];
+        meTaxItems = results[9]||[], meTaxProv = results[10]||[], meVendBals = results[11]||[],
+        jdzExp = results[12]||[];
     var backup = {
       exported_at: new Date().toISOString(),
       exported_by: 'Zaphire Capital Business Manager',
@@ -1822,7 +1832,8 @@ function downloadBackup() {
         me_bill_months: meMonths.length,
         me_tax_items: meTaxItems.length,
         me_tax_providers: meTaxProv.length,
-        me_vendor_balances: meVendBals.length
+        me_vendor_balances: meVendBals.length,
+        jdz_expenses: jdzExp.length
       },
       tables: {
         zt_loans:       loans,
@@ -1836,7 +1847,8 @@ function downloadBackup() {
         me_bills:       meBills,
         me_tax_items:   meTaxItems,
         me_tax_providers: meTaxProv,
-        me_vendor_balances: meVendBals
+        me_vendor_balances: meVendBals,
+        jdz_expenses:   jdzExp
       }
     };
 
@@ -2913,6 +2925,17 @@ function renderJdzSettings() {
   html += '</div><div class="tag-add-row">';
   html += '<input type="text" id="jdz-type-input" placeholder="Add deal type..." style="max-width:240px">';
   html += '<button class="btn btn-sm" style="background:var(--jdz);color:white;border:none" onclick="addJdzType()">Add</button></div></div>';
+
+  var expCats = jdzExpenseCats();
+  html += '<div class="card" style="margin-bottom:16px">';
+  html += '<div class="card-header"><div><div class="card-title" style="color:var(--jdz)">Expense Categories</div><div class="card-sub">'+expCats.length+' categories for the JDZ expense tracker</div></div></div>';
+  html += '<div class="tag-list">';
+  expCats.forEach(function(c,i){
+    html += '<span class="tag" style="border-color:var(--jdz-border);color:var(--jdz-light)">'+esc(c)+'<span class="tag-del" onclick="removeJdzExpenseCat('+i+')">&#215;</span></span>';
+  });
+  html += '</div><div class="tag-add-row">';
+  html += '<input type="text" id="jdz-expcat-input" placeholder="Add expense category..." style="max-width:240px">';
+  html += '<button class="btn btn-sm" style="background:var(--jdz);color:white;border:none" onclick="addJdzExpenseCat()">Add</button></div></div>';
   el.innerHTML = html;
 }
 
@@ -2935,6 +2958,134 @@ function addJdzType(){
 }
 function removeJdzType(idx){
   state.settings.jdzDealTypes.splice(idx,1); saveSettings(); renderJdzSettings();
+}
+function addJdzExpenseCat(){
+  var inp=document.getElementById('jdz-expcat-input');
+  var val=inp.value.trim(); if(!val) return;
+  if(!state.settings.jdzExpenseCats) state.settings.jdzExpenseCats=[];
+  if(state.settings.jdzExpenseCats.indexOf(val)<0) state.settings.jdzExpenseCats.push(val);
+  inp.value=''; saveSettings(); renderJdzSettings();
+}
+function removeJdzExpenseCat(idx){
+  state.settings.jdzExpenseCats.splice(idx,1); saveSettings(); renderJdzSettings();
+}
+
+// ── JDZ EXPENSES ─────────────────────────────
+function jdzExpenseCats(){
+  return (state.settings.jdzExpenseCats && state.settings.jdzExpenseCats.length)
+    ? state.settings.jdzExpenseCats.slice()
+    : ['Mileage / gas','Dues / licensing','Office supplies','Marketing','Insurance','Software / subscriptions','Travel','Meals','Professional fees','Other'];
+}
+var _jdzExpSort = 'date'; // date | amount | category
+function renderJdzExpenses(){
+  var el = document.getElementById('content');
+  var year = new Date().getFullYear();
+  var mon = new Date().getMonth();
+  var exps = (state.jdzExpenses||[]).filter(function(e){return !e.deleted_at;});
+
+  // Totals
+  var ytdSpent=0, monthSpent=0;
+  exps.forEach(function(e){
+    if(e.date && new Date(e.date+'T12:00:00').getFullYear()===year){
+      var amt=+(e.amount||0); ytdSpent+=amt;
+      if(new Date(e.date+'T12:00:00').getMonth()===mon) monthSpent+=amt;
+    }
+  });
+  // Income = paid deals this year
+  var income=0;
+  (state.jdzDeals||[]).forEach(function(d){
+    if(d.payment_status==='Paid' && d.deal_date && new Date(d.deal_date+'T12:00:00').getFullYear()===year) income+=+(d.amount||0);
+  });
+  var net = income - ytdSpent;
+
+  var html = '';
+  // Profit view (Option C)
+  html += '<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">';
+  html += '<div class="stat-tile" style="border-color:var(--jdz-border)"><div class="stat-label">Income YTD</div><div class="stat-value"><span style="color:var(--jdz-light)">'+fmtDollar(income)+'</span></div><div class="stat-sub">paid deals '+year+'</div></div>';
+  html += '<div class="stat-tile"><div class="stat-label">Expenses YTD</div><div class="stat-value"><span style="color:var(--red)">'+fmtDollar(ytdSpent)+'</span></div><div class="stat-sub">this month '+fmtDollar(monthSpent)+'</div></div>';
+  html += '<div class="stat-tile" style="border-color:'+(net>=0?'rgba(29,158,117,0.4)':'rgba(230,57,70,0.4)')+'"><div class="stat-label">Net profit YTD</div><div class="stat-value"><span style="color:'+(net>=0?'var(--jdz-light)':'var(--red)')+'">'+fmtDollar(net)+'</span></div><div class="stat-sub">income − expenses</div></div>';
+  html += '</div>';
+
+  // Ledger (Option A)
+  html += '<div class="card"><div class="card-header"><div><div class="card-title" style="color:var(--jdz)">Expense ledger</div><div class="card-sub">'+exps.length+' expense'+(exps.length!==1?'s':'')+' &middot; sorted by '+_jdzExpSort+'</div></div>';
+  html += '<div style="display:flex;gap:6px">';
+  function sbtn(key,label){ var on=_jdzExpSort===key; return '<button onclick="_jdzExpSort=\''+key+'\';renderJdzExpenses()" style="font-size:11px;padding:5px 11px;border-radius:6px;border:1px solid '+(on?'var(--jdz)':'var(--border)')+';background:'+(on?'var(--jdz)':'transparent')+';color:'+(on?'#fff':'var(--muted)')+';cursor:pointer">'+label+'</button>'; }
+  html += sbtn('date','Date')+sbtn('amount','Amount')+sbtn('category','Category');
+  html += '</div></div>';
+
+  var sorted = exps.slice();
+  if(_jdzExpSort==='amount') sorted.sort(function(a,b){return (+(b.amount||0))-(+(a.amount||0));});
+  else if(_jdzExpSort==='category') sorted.sort(function(a,b){return (a.category||'').localeCompare(b.category||'');});
+  else sorted.sort(function(a,b){return (b.date||'')>(a.date||'')?1:-1;});
+
+  if(sorted.length){
+    html += '<div class="table-wrap sticky-wrap"><table class="sticky-head"><thead><tr><th>Date</th><th>Payee</th><th>Category</th><th>Note</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>';
+    sorted.forEach(function(e){
+      html += '<tr>';
+      html += '<td>'+fmtDate(e.date)+'</td>';
+      html += '<td><strong>'+esc(e.payee||'—')+'</strong></td>';
+      html += '<td><span class="badge-me" style="background:rgba(29,158,117,0.15);color:var(--jdz-light);border-color:rgba(29,158,117,0.3)">'+esc(e.category||'—')+'</span></td>';
+      html += '<td style="font-size:11px;color:var(--muted)">'+esc(e.note||'')+'</td>';
+      html += '<td class="mono" style="text-align:right;color:var(--jdz-light)">'+fmtDollar(e.amount)+'</td>';
+      html += '<td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="openEditJdzExpense('+e.id+')">Edit</button> <button class="btn btn-danger btn-sm" onclick="deleteJdzExpense('+e.id+')">&times;</button></td>';
+      html += '</tr>';
+    });
+    html += '<tr style="border-top:2px solid var(--border);font-weight:600"><td colspan="4">Total</td><td class="mono" style="text-align:right;color:var(--jdz-light)">'+fmtDollar(ytdSpent+exps.filter(function(e){return !e.date||new Date(e.date+"T12:00:00").getFullYear()!==year;}).reduce(function(s,e){return s+(+(e.amount||0));},0))+'</td><td></td></tr>';
+    html += '</tbody></table></div>';
+  } else {
+    html += '<div style="text-align:center;padding:44px;color:var(--muted)">No expenses yet. Click “+ Add Expense” to start.</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function openAddJdzExpense(){ jdzExpenseForm(null); }
+function openEditJdzExpense(id){ var e=(state.jdzExpenses||[]).find(function(x){return x.id===id;}); jdzExpenseForm(e||null); }
+function jdzExpenseForm(e){
+  var isEdit=!!e;
+  var cats=jdzExpenseCats();
+  var today=new Date().toISOString().slice(0,10);
+  var html='<div class="modal-title" style="color:var(--jdz)">'+(isEdit?'Edit Expense':'Add Expense')+'</div>';
+  html+='<div class="modal-sub">JDZaphire Logistics</div>';
+  html+='<div class="form-grid">';
+  html+='<div class="form-group full"><label>Payee / who you paid</label><input type="text" id="je-payee" value="'+(e?esc(e.payee||''):'')+'" placeholder="e.g. Staples, Shell, NNA"></div>';
+  html+='<div class="form-group"><label>Category</label><select id="je-cat">';
+  cats.forEach(function(c){ html+='<option value="'+esc(c)+'"'+((e&&e.category===c)?' selected':'')+'>'+esc(c)+'</option>'; });
+  html+='</select></div>';
+  html+='<div class="form-group"><label>Amount</label><input type="text" inputmode="decimal" id="je-amt" value="'+(e&&e.amount?e.amount:'')+'" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label>Date</label><input type="date" id="je-date" value="'+(e&&e.date?e.date:today)+'"></div>';
+  html+='<div class="form-group full"><label>Note (optional)</label><input type="text" id="je-note" value="'+(e?esc(e.note||''):'')+'" placeholder="Any details..."></div>';
+  html+='</div>';
+  html+='<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button>';
+  html+='<button class="btn btn-sm" style="background:var(--jdz);color:#fff;border:none;padding:7px 18px;border-radius:8px;cursor:pointer" onclick="saveJdzExpense('+(isEdit?e.id:'null')+')">'+(isEdit?'Save':'Add Expense')+'</button></div>';
+  openModal(html);
+}
+function saveJdzExpense(id){
+  var payee=document.getElementById('je-payee').value.trim();
+  if(!payee){ alert('Enter who you paid.'); return; }
+  var data={
+    payee:payee,
+    category:document.getElementById('je-cat').value,
+    amount:parseFloat(String(document.getElementById('je-amt').value).replace(/[$,]/g,''))||0,
+    date:document.getElementById('je-date').value||null,
+    note:document.getElementById('je-note').value.trim()||null
+  };
+  setSyncStatus('saving','Saving...');
+  var promise = id ? apiPatch('jdz_expenses',id,data) : apiPost('jdz_expenses',[data]);
+  promise.then(function(result){
+    var saved=Array.isArray(result)?result[0]:result;
+    if(id){ var idx=state.jdzExpenses.findIndex(function(x){return x.id===id;}); if(idx>=0) state.jdzExpenses[idx]=saved; }
+    else state.jdzExpenses.push(saved);
+    setSyncStatus('saved','Saved ✓'); closeModal(); renderJdzExpenses();
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
+}
+function deleteJdzExpense(id){
+  if(!confirm('Delete this expense?')) return;
+  setSyncStatus('saving','Deleting...');
+  apiDelete('jdz_expenses',id).then(function(){
+    state.jdzExpenses = state.jdzExpenses.filter(function(x){return x.id!==id;});
+    setSyncStatus('saved','Deleted ✓'); renderJdzExpenses();
+  }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
 }
 
 function renderJdzTrash() {
