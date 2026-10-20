@@ -162,6 +162,39 @@ textarea{resize:vertical;min-height:80px;}
   .wife-report{border:none!important;}
   .wife-report *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
 }
+
+/* ── MOBILE BOTTOM NAV (hidden on desktop) ── */
+#mobile-nav{display:none;}
+#mobile-home{display:none;}
+
+@media (max-width:640px){
+  html,body{overflow:auto;}
+  #app{display:block;height:auto;min-height:100vh;}
+  #sidebar{display:none !important;}
+  #main{height:auto;overflow:visible;}
+  .topbar{height:52px;padding:0 16px;position:sticky;top:0;z-index:40;}
+  .topbar-title{font-size:17px;}
+  .topbar-actions .btn{padding:7px 12px;}
+  .content{padding:16px 14px 90px;overflow:visible;}
+  .card{padding:16px;}
+  .stat-grid{grid-template-columns:1fr 1fr !important;gap:10px;}
+  .form-grid{grid-template-columns:1fr !important;}
+  .modal{width:100% !important;max-width:100% !important;max-height:92vh !important;border-radius:16px 16px 0 0 !important;margin-top:auto;}
+  .modal-overlay{align-items:flex-end !important;}
+  /* bigger tap targets in forms */
+  input,select,textarea{font-size:16px !important;min-height:44px;}
+  .btn{min-height:40px;}
+
+  /* bottom tab bar */
+  #mobile-nav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:50;background:#0a1420;border-top:1px solid var(--border);}
+  #mobile-nav .mnav{flex:1;text-align:center;padding:8px 0 7px;cursor:pointer;color:var(--muted);}
+  #mobile-nav .mnav .mi{font-size:20px;line-height:1;}
+  #mobile-nav .mnav .ml{font-size:9px;margin-top:2px;letter-spacing:.02em;}
+  #mobile-nav .mnav.active{color:var(--accent-dyn,var(--gold));}
+}
+@media (min-width:641px){
+  #mobile-nav{display:none !important;}
+}
 </style>
 </head>
 <body>
@@ -256,6 +289,13 @@ textarea{resize:vertical;min-height:80px;}
       <div class="loading"><div class="spinner"></div> Loading your data...</div>
     </div>
   </div>
+</div>
+<div id="mobile-nav">
+  <div class="mnav" id="mnav-add" onclick="mobileQuickAdd()"><div class="mi">＋</div><div class="ml">Add</div></div>
+  <div class="mnav" id="mnav-bills" onclick="mobileGo('bills')"><div class="mi">📅</div><div class="ml">Bills</div></div>
+  <div class="mnav" id="mnav-loans" onclick="mobileGo('loans')"><div class="mi">📂</div><div class="ml">Loans</div></div>
+  <div class="mnav" id="mnav-home" onclick="mobileGo('home')"><div class="mi">🏠</div><div class="ml">Home</div></div>
+  <div class="mnav" id="mnav-more" onclick="mobileMore()"><div class="mi">☰</div><div class="ml">More</div></div>
 </div>
 <div id="modal-overlay" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal()">
   <div class="modal" id="modal-content"></div>
@@ -481,6 +521,8 @@ function initApp() {
     updateDatesBadge();
     updateJdzTrashBadge();
     setSyncStatus('connected', 'Synced \u2713');
+    updateMobileAccent();
+    setMNavActive('mnav-home');
     showPage('dashboard');
   }).catch(function(err) {
     setSyncStatus('error', 'Connection error');
@@ -654,6 +696,68 @@ function switchCompany(co) {
     sub.textContent = 'My Finances';
     showPage('me-dashboard');
   }
+  updateMobileAccent();
+}
+
+// ── MOBILE helpers ──
+function updateMobileAccent(){
+  var c = activeCompany==='jdz' ? 'var(--jdz)' : activeCompany==='me' ? 'var(--me)' : 'var(--gold)';
+  document.documentElement.style.setProperty('--accent-dyn', c);
+}
+function setMNavActive(id){
+  ['mnav-add','mnav-bills','mnav-loans','mnav-home','mnav-more'].forEach(function(x){
+    var el=document.getElementById(x); if(el) el.className='mnav';
+  });
+  var a=document.getElementById(id); if(a) a.className='mnav active';
+}
+// Bottom-tab targets adapt to whichever company is active
+function mobileGo(which){
+  if(which==='home'){ setMNavActive('mnav-home'); showPage(homePageForCompany()); return; }
+  if(which==='bills'){ setMNavActive('mnav-bills'); switchCompany('me'); showPage('me-planner'); return; }
+  if(which==='loans'){
+    setMNavActive('mnav-loans');
+    if(activeCompany==='jdz'){ showPage('jdz-deals'); }
+    else { switchCompany('zc'); showPage('loans'); }
+    return;
+  }
+}
+function homePageForCompany(){
+  return activeCompany==='jdz' ? 'jdz-dashboard' : activeCompany==='me' ? 'me-dashboard' : 'dashboard';
+}
+function mobileQuickAdd(){
+  setMNavActive('mnav-add');
+  var html = '<div class="modal-title" style="color:var(--white)">Quick add</div><div class="modal-sub">What do you want to add?</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">';
+  html += '<button class="btn" style="background:var(--me);color:#fff;border:none;justify-content:flex-start;text-align:left;padding:14px" onclick="closeModal();switchCompany(\'me\');openAddExpense()">🧾&nbsp; Personal expense</button>';
+  html += '<button class="btn" style="background:var(--jdz);color:#fff;border:none;padding:14px" onclick="closeModal();switchCompany(\'jdz\');openAddJdzExpense()">🧾&nbsp; JDZ expense</button>';
+  html += '<button class="btn" style="background:var(--jdz);color:#fff;border:none;padding:14px" onclick="closeModal();switchCompany(\'jdz\');openAddDeal()">💼&nbsp; JDZ deal</button>';
+  html += '<button class="btn btn-gold" style="padding:14px" onclick="closeModal();switchCompany(\'zc\');openAddLoan()">🏠&nbsp; Loan</button>';
+  html += '</div>';
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button></div>';
+  openModal(html);
+}
+function mobileMore(){
+  setMNavActive('mnav-more');
+  function item(label, fn){ return '<button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;padding:13px;width:100%" onclick="closeModal();'+fn+'">'+label+'</button>'; }
+  var html = '<div class="modal-title" style="color:var(--white)">More</div>';
+  html += '<div style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:10px 0 6px">Switch company</div>';
+  html += '<div style="display:flex;gap:8px;margin-bottom:12px">';
+  html += '<button class="btn" style="flex:1;background:var(--gold);color:var(--navy);border:none" onclick="closeModal();switchCompany(\'zc\')">Zaphire</button>';
+  html += '<button class="btn" style="flex:1;background:var(--jdz);color:#fff;border:none" onclick="closeModal();switchCompany(\'jdz\')">JDZ</button>';
+  html += '<button class="btn" style="flex:1;background:var(--me);color:#fff;border:none" onclick="closeModal();switchCompany(\'me\')">Personal</button>';
+  html += '</div>';
+  html += '<div style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:6px 0">Go to</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:7px">';
+  if(activeCompany==='zc'){
+    html += item('📊 Dashboard',"showPage('dashboard')") + item('🏠 Active Loans',"showPage('loans')") + item('📁 Closed Files',"showPage('closed')") + item('📅 Important Dates',"showPage('dates')") + item('💰 Earnings',"showPage('earnings')") + item('⚙️ Settings',"showPage('settings')");
+  } else if(activeCompany==='jdz'){
+    html += item('📊 Dashboard',"showPage('jdz-dashboard')") + item('💼 Deals',"showPage('jdz-deals')") + item('🧾 Expenses',"showPage('jdz-expenses')") + item('📋 History',"showPage('jdz-history')") + item('💰 Earnings',"showPage('earnings')") + item('⚙️ JDZ Settings',"showPage('jdz-settings')");
+  } else {
+    html += item('📊 Dashboard',"showPage('me-dashboard')") + item('📅 Bill Planner',"showPage('me-planner')") + item('📤 Expenses & YTD',"showPage('me-expenses')") + item('📈 Reports',"showPage('me-reports')") + item('🧾 Tax Prep',"showPage('me-tax')") + item('⚙️ Settings',"showPage('me-settings')");
+  }
+  html += '</div>';
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>';
+  openModal(html);
 }
 
 function showPage(page) {
