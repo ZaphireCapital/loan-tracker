@@ -261,6 +261,7 @@ textarea{resize:vertical;min-height:80px;}
         <div class="nav-item" id="nav-jdz-dashboard" onclick="showPage('jdz-dashboard')"><span class="icon">📊</span> Dashboard</div>
         <div class="nav-item" id="nav-jdz-deals" onclick="showPage('jdz-deals')"><span class="icon">💼</span> Deals</div>
         <div class="nav-item" id="nav-jdz-expenses" onclick="showPage('jdz-expenses')"><span class="icon">🧾</span> Expenses</div>
+        <div class="nav-item" id="nav-jdz-dates" onclick="showPage('jdz-dates')"><span class="icon">📅</span> Important Dates <span id="jdz-dates-due-count" style="margin-left:auto;background:rgba(230,57,70,0.2);color:var(--red);border-radius:10px;padding:1px 7px;font-size:10px;display:none"></span></div>
         <div class="nav-item" id="nav-jdz-history" onclick="showPage('jdz-history')"><span class="icon">📋</span> History</div>
       </div>
       <div class="nav-section">
@@ -359,6 +360,8 @@ var state = {
   jdzDeals: [],
   jdzTrash: [],
   jdzExpenses: [],
+  jdzDates: [],
+  jdzDatesTrash: [],
   meExpenses: [],
   meVendors: [],
   meBillMonths: [],
@@ -509,7 +512,8 @@ function initApp() {
       apiGet('me_tax_items', 'select=*').catch(function(){ return []; }),
       apiGet('me_tax_providers', 'select=*').catch(function(){ return []; }),
       apiGet('me_vendor_balances', 'select=*').catch(function(){ return []; }),
-      apiGet('jdz_expenses', 'select=*').catch(function(){ return []; })
+      apiGet('jdz_expenses', 'select=*').catch(function(){ return []; }),
+      apiGet('jdz_dates', 'select=*').catch(function(){ return []; })
     ]);
   }).then(function(results) {
     (results[0]||[]).forEach(function(n) { state.closedNotes[n.loan_id] = n.note; });
@@ -529,8 +533,12 @@ function initApp() {
     state.meVendorBalances = (results[9] || []);
     var allJdzExp = results[10] || [];
     state.jdzExpenses = allJdzExp.filter(function(e){ return !e.deleted_at; });
+    var allJdzDates = results[11] || [];
+    state.jdzDates = allJdzDates.filter(function(d){ return !d.deleted_at; });
+    state.jdzDatesTrash = allJdzDates.filter(function(d){ return !!d.deleted_at; });
     updateTrashBadge();
     updateDatesBadge();
+    updateJdzDatesBadge();
     updateJdzTrashBadge();
     setSyncStatus('connected', 'Synced \u2713');
     updateMobileAccent();
@@ -763,7 +771,7 @@ function mobileMore(){
   if(activeCompany==='zc'){
     html += item('📊 Dashboard',"showPage('dashboard')") + item('🏠 Active Loans',"showPage('loans')") + item('📁 Closed Files',"showPage('closed')") + item('📅 Important Dates',"showPage('dates')") + item('💰 Earnings',"showPage('earnings')") + item('⚙️ Settings',"showPage('settings')");
   } else if(activeCompany==='jdz'){
-    html += item('📊 Dashboard',"showPage('jdz-dashboard')") + item('💼 Deals',"showPage('jdz-deals')") + item('🧾 Expenses',"showPage('jdz-expenses')") + item('📋 History',"showPage('jdz-history')") + item('💰 Earnings',"showPage('earnings')") + item('⚙️ JDZ Settings',"showPage('jdz-settings')");
+    html += item('📊 Dashboard',"showPage('jdz-dashboard')") + item('💼 Deals',"showPage('jdz-deals')") + item('🧾 Expenses',"showPage('jdz-expenses')") + item('📅 Important Dates',"showPage('jdz-dates')") + item('📋 History',"showPage('jdz-history')") + item('💰 Earnings',"showPage('earnings')") + item('⚙️ JDZ Settings',"showPage('jdz-settings')");
   } else {
     html += item('📊 Dashboard',"showPage('me-dashboard')") + item('📅 Bill Planner',"showPage('me-planner')") + item('📤 Expenses & YTD',"showPage('me-expenses')") + item('📈 Reports',"showPage('me-reports')") + item('🧾 Tax Prep',"showPage('me-tax')") + item('⚙️ Settings',"showPage('me-settings')");
   }
@@ -774,7 +782,7 @@ function mobileMore(){
 
 function showPage(page) {
   currentPage = page;
-  var allNavIds = ['dashboard','loans','closed','earnings','settings','trash','dates','jdz-dashboard','jdz-deals','jdz-expenses','jdz-history','jdz-settings','jdz-trash','me-dashboard','me-planner','me-expenses','me-reports','me-tax','me-settings'];
+  var allNavIds = ['dashboard','loans','closed','earnings','settings','trash','dates','jdz-dashboard','jdz-deals','jdz-expenses','jdz-dates','jdz-history','jdz-settings','jdz-trash','me-dashboard','me-planner','me-expenses','me-reports','me-tax','me-settings'];
   allNavIds.forEach(function(p) {
     var el = document.getElementById('nav-' + p);
     if(el) el.className = 'nav-item';
@@ -792,7 +800,7 @@ function showPage(page) {
   var titles = {
     dashboard:'Dashboard', loans:'Active Loans', closed:'Closed Files',
     earnings:'Earnings & Payouts', settings:'Settings', trash:'Trash', dates:'Important Dates',
-    'jdz-dashboard':'JDZ Dashboard', 'jdz-deals':'Deals', 'jdz-expenses':'JDZ Expenses', 'jdz-history':'Deal History',
+    'jdz-dashboard':'JDZ Dashboard', 'jdz-deals':'Deals', 'jdz-expenses':'JDZ Expenses', 'jdz-dates':'JDZ Important Dates', 'jdz-history':'Deal History',
     'jdz-settings':'JDZ Settings', 'jdz-trash':'JDZ Trash',
     'me-dashboard':'Personal Dashboard', 'me-planner':'Bill Planner', 'me-expenses':'Expenses & YTD', 'me-reports':'Reports', 'me-tax':'Tax Prep', 'me-settings':'Personal Settings'
   };
@@ -806,6 +814,8 @@ function showPage(page) {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--jdz);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddDeal()">+ Add Deal</button>';
   } else if(page==='jdz-expenses') {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--jdz);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddJdzExpense()">+ Add Expense</button>';
+  } else if(page==='jdz-dates') {
+    acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--jdz);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddDate(null,\'jdz\')">+ Add Date</button>';
   } else if(page==='me-expenses'||page==='me-dashboard') {
     acts.innerHTML = '<button class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print</button> <button class="btn btn-sm" style="background:var(--me);color:white;border:none;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer" onclick="openAddExpense()">+ Add Expense</button>';
   } else if(page==='me-planner') {
@@ -820,7 +830,7 @@ function showPage(page) {
   var renders = {
     dashboard:renderDashboard, loans:renderLoans, closed:renderClosed,
     earnings:renderEarnings, settings:renderSettings, trash:renderTrash, dates:renderDates,
-    'jdz-dashboard':renderJdzDashboard, 'jdz-deals':renderJdzDeals, 'jdz-expenses':renderJdzExpenses,
+    'jdz-dashboard':renderJdzDashboard, 'jdz-deals':renderJdzDeals, 'jdz-expenses':renderJdzExpenses, 'jdz-dates':renderJdzDates,
     'jdz-history':renderJdzHistory, 'jdz-settings':renderJdzSettings, 'jdz-trash':renderJdzTrash,
     'me-dashboard':renderMeDashboard, 'me-expenses':renderMeExpenses,
     'me-reports':renderMeReports, 'me-settings':renderMeSettings, 'me-planner':renderMePlanner,
@@ -1926,13 +1936,14 @@ function downloadBackup() {
     safeGet('me_tax_items'),
     safeGet('me_tax_providers'),
     safeGet('me_vendor_balances'),
-    safeGet('jdz_expenses')
+    safeGet('jdz_expenses'),
+    safeGet('jdz_dates')
   ]).then(function(results) {
     var loans = results[0]||[], settings = results[1]||[], notes = results[2]||[],
         dates = results[3]||[], jdz = results[4]||[], meExp = results[5]||[],
         meVend = results[6]||[], meMonths = results[7]||[], meBills = results[8]||[],
         meTaxItems = results[9]||[], meTaxProv = results[10]||[], meVendBals = results[11]||[],
-        jdzExp = results[12]||[];
+        jdzExp = results[12]||[], jdzDates = results[13]||[];
     var backup = {
       exported_at: new Date().toISOString(),
       exported_by: 'Zaphire Capital Business Manager',
@@ -1949,7 +1960,8 @@ function downloadBackup() {
         me_tax_items: meTaxItems.length,
         me_tax_providers: meTaxProv.length,
         me_vendor_balances: meVendBals.length,
-        jdz_expenses: jdzExp.length
+        jdz_expenses: jdzExp.length,
+        jdz_dates: jdzDates.length
       },
       tables: {
         zt_loans:       loans,
@@ -1964,7 +1976,8 @@ function downloadBackup() {
         me_tax_items:   meTaxItems,
         me_tax_providers: meTaxProv,
         me_vendor_balances: meVendBals,
-        jdz_expenses:   jdzExp
+        jdz_expenses:   jdzExp,
+        jdz_dates:      jdzDates
       }
     };
 
@@ -2538,7 +2551,32 @@ function renderTrash() {
 
 var DATE_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-function updateDatesBadge() {
+// ── Dates engine works for either company via a scope config ──
+var DATES_SCOPES = {
+  zc:  { table:'zt_dates',  list:'dates',    trash:'datesTrash',    badge:'dates-due-count',     reqKey:'dateRequirers',    render:function(){renderDates();},    btnClass:'btn-gold', addLabel:'Add Important Date', sub:'Add a compliance, licensing, or company deadline' },
+  jdz: { table:'jdz_dates', list:'jdzDates', trash:'jdzDatesTrash', badge:'jdz-dates-due-count',  reqKey:'jdzDateRequirers', render:function(){renderJdzDates();}, btnClass:'btn-teal', addLabel:'Add JDZ Date',        sub:'Add a notary, licensing, or JDZ deadline' }
+};
+var DATE_REQUIRERS_JDZ = ['CT Secretary of State','NNA','E&O Insurance','IRS','Town Clerk','Other'];
+var _dateScope = 'zc'; // which scope the open form belongs to
+
+function updateDatesBadgeScope(scope) {
+  var cfg = DATES_SCOPES[scope];
+  var today = new Date(); today.setHours(0,0,0,0);
+  var soon = (state[cfg.list]||[]).filter(function(d){
+    if(!d.due_date || d.completed) return false;
+    var due = new Date(d.due_date + 'T12:00:00');
+    var days = Math.round((due - today) / 86400000);
+    return days <= 14 && days >= 0;
+  });
+  var el = document.getElementById(cfg.badge);
+  if(!el) return;
+  if(soon.length > 0) { el.textContent = soon.length; el.style.display = 'inline'; }
+  else { el.style.display = 'none'; }
+}
+function updateDatesBadge() { updateDatesBadgeScope('zc'); }
+function updateJdzDatesBadge() { updateDatesBadgeScope('jdz'); }
+
+function _updateDatesBadgeLegacy() {
   var today = new Date(); today.setHours(0,0,0,0);
   var soon = (state.dates||[]).filter(function(d){
     if(!d.due_date || d.completed) return false;
@@ -2552,10 +2590,13 @@ function updateDatesBadge() {
   else { el.style.display = 'none'; }
 }
 
-function renderDates() {
+function renderDates() { renderDatesScope('zc'); }
+function renderJdzDates() { renderDatesScope('jdz'); }
+function renderDatesScope(scope) {
+  var cfg = DATES_SCOPES[scope];
   var el = document.getElementById('content');
   var today = new Date(); today.setHours(0,0,0,0);
-  var active = (state.dates||[]).filter(function(d){ return !d.deleted_at; });
+  var active = (state[cfg.list]||[]).filter(function(d){ return !d.deleted_at; });
   var html = '';
 
   // ── NEXT UP banner ──
@@ -2582,7 +2623,7 @@ function renderDates() {
       html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(d.requirer||'')+(d.fee?'  &middot;  Fee: $'+parseFloat(d.fee).toFixed(2):'')+'</div></div>';
       html += '<div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:600;color:'+urgColor+'">'+urgLabel+'</div>';
       html += '<div style="font-size:11px;color:var(--muted)">'+fmtDate(d.due_date)+'</div></div>';
-      html += '<button class="btn btn-ghost btn-sm" onclick="openEditDate('+d.id+')">View</button></div>';
+      html += '<button class="btn btn-ghost btn-sm" onclick="openEditDate('+d.id+',\''+scope+'\')">View</button></div>';
     });
     html += '</div>';
   }
@@ -2610,7 +2651,7 @@ function renderDates() {
     html += '<div class="card-header" style="margin-bottom:12px">';
     html += '<div><div class="card-title">'+(isCurrentMonth?'&#9654; ':'')+month+'</div>';
     html += '<div class="card-sub">'+allItems.length+' item'+(allItems.length!==1?'s':'')+(isCurrentMonth?' &nbsp;&bull;&nbsp; <span style="color:var(--gold)">Current month</span>':'')+'</div></div>';
-    html += '<button class="btn btn-ghost btn-sm" onclick="openAddDateForMonth('+mi+')">+ Add</button></div>';
+    html += '<button class="btn btn-ghost btn-sm" onclick="openAddDateForMonth('+mi+',\''+scope+'\')">+ Add</button></div>';
 
     allItems.forEach(function(d) {
       var due = d.due_date ? new Date(d.due_date + 'T12:00:00') : null;
@@ -2620,7 +2661,7 @@ function renderDates() {
       var urgColor = d.completed ? 'var(--green)' : overdue ? 'var(--red)' : soonFlag ? '#f4a261' : 'var(--muted)';
       var rowBg = d.completed ? 'rgba(45,198,83,0.04)' : overdue ? 'rgba(230,57,70,0.06)' : 'rgba(255,255,255,0.02)';
 
-      html += '<div style="background:'+rowBg+';border:1px solid rgba(255,255,255,0.06);border-left:3px solid '+urgColor+';border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer" onclick="openEditDate('+d.id+')">';
+      html += '<div style="background:'+rowBg+';border:1px solid rgba(255,255,255,0.06);border-left:3px solid '+urgColor+';border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer" onclick="openEditDate('+d.id+',\''+scope+'\')">';
       html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">';
       html += '<div style="flex:1;min-width:0">';
 
@@ -2648,10 +2689,10 @@ function renderDates() {
       // Action buttons
       html += '<div style="display:flex;gap:6px;flex-shrink:0" onclick="event.stopPropagation()">';
       if(!d.completed) {
-        html += '<button class="btn btn-teal btn-sm" onclick="markDateComplete('+d.id+')">&#10003;</button>';
+        html += '<button class="btn btn-teal btn-sm" onclick="markDateComplete('+d.id+',\''+scope+'\')">&#10003;</button>';
       }
-      html += '<button class="btn btn-ghost btn-sm" onclick="openEditDate('+d.id+')">Edit</button>';
-      html += '<button class="btn btn-danger btn-sm" onclick="softDeleteDate('+d.id+')">Del</button>';
+      html += '<button class="btn btn-ghost btn-sm" onclick="openEditDate('+d.id+',\''+scope+'\')">Edit</button>';
+      html += '<button class="btn btn-danger btn-sm" onclick="softDeleteDate('+d.id+',\''+scope+'\')">Del</button>';
       html += '</div></div></div>';
     });
     html += '</div>';
@@ -2665,20 +2706,20 @@ function renderDates() {
   }
 
   // Dates trash section
-  var dTrash = (state.datesTrash||[]).filter(function(d){
+  var dTrash = (state[cfg.trash]||[]).filter(function(d){
     var cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
     return new Date(d.deleted_at) > cutoff;
   });
   if(dTrash.length) {
     html += '<div class="card" style="margin-top:20px;border-color:rgba(230,57,70,0.2)">';
     html += '<div class="card-header"><div><div class="card-title" style="color:var(--red)">&#128465; Recently Deleted</div><div class="card-sub">Auto-purged after 30 days</div></div>';
-    html += '<button class="btn btn-danger btn-sm" onclick="emptyDatesTrash()">Empty</button></div>';
+    html += '<button class="btn btn-danger btn-sm" onclick="emptyDatesTrash(\''+scope+'\')">Empty</button></div>';
     dTrash.forEach(function(d){
       var daysLeft = Math.ceil((new Date(new Date(d.deleted_at).getTime()+30*86400000) - new Date()) / 86400000);
       html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04)">';
       html += '<div><div style="font-size:13px;color:var(--muted);text-decoration:line-through">'+esc(d.title)+'</div>';
       html += '<div style="font-size:11px;color:var(--red);margin-top:2px">Deletes in '+daysLeft+' day'+(daysLeft!==1?'s':'')+'</div></div>';
-      html += '<button class="btn btn-teal btn-sm" onclick="restoreDate('+d.id+')">&#8617; Restore</button></div>';
+      html += '<button class="btn btn-teal btn-sm" onclick="restoreDate('+d.id+',\''+scope+'\')">&#8617; Restore</button></div>';
     });
     html += '</div>';
   }
@@ -2689,21 +2730,25 @@ function renderDates() {
 // ── Date form modal ──────────────────────────
 var DATE_REQUIRERS = ['NMLS','NYSDFS','IRS','HUD','CFPB','State DOB','FDIC','Other'];
 
-function openAddDate(month) {
-  showDateForm(null, month !== undefined ? month : null);
+function openAddDate(month, scope) {
+  showDateForm(null, month !== undefined && month !== null ? month : null, scope||'zc');
 }
-function openAddDateForMonth(mi) { showDateForm(null, mi); }
-function openEditDate(id) { showDateForm(id, null); }
+function openAddDateForMonth(mi, scope) { showDateForm(null, mi, scope||'zc'); }
+function openEditDate(id, scope) { showDateForm(id, null, scope||'zc'); }
 
-function showDateForm(id, defaultMonth) {
-  var d = id ? (state.dates||[]).find(function(x){return x.id===id;}) : null;
+function showDateForm(id, defaultMonth, scope) {
+  scope = scope || 'zc';
+  _dateScope = scope;
+  var cfg = DATES_SCOPES[scope];
+  var d = id ? (state[cfg.list]||[]).find(function(x){return x.id===id;}) : null;
   function v(f, def) {
     if(def===undefined) def='';
     return d ? (d[f]!==undefined&&d[f]!==null ? d[f] : def) : def;
   }
 
-  // Build requirer options
-  var reqList = (state.settings.dateRequirers || DATE_REQUIRERS);
+  // Build requirer options (each scope has its own requirer list)
+  var reqDefaults = scope==='jdz' ? DATE_REQUIRERS_JDZ : DATE_REQUIRERS;
+  var reqList = (state.settings[cfg.reqKey] || reqDefaults);
   var reqOptions = reqList.map(function(r){
     return '<option value="'+esc(r)+'"'+(v('requirer')===r?' selected':'')+'>'+esc(r)+'</option>';
   }).join('');
@@ -2715,8 +2760,8 @@ function showDateForm(id, defaultMonth) {
     defaultDate = yr + '-' + String(defaultMonth+1).padStart(2,'0') + '-01';
   }
 
-  var html = '<div class="modal-title">'+(d?'Edit Date':'Add Important Date')+'</div>';
-  html += '<div class="modal-sub">'+(d?esc(d.title):'Add a compliance, licensing, or company deadline')+'</div>';
+  var html = '<div class="modal-title">'+(d?'Edit Date':cfg.addLabel)+'</div>';
+  html += '<div class="modal-sub">'+(d?esc(d.title):cfg.sub)+'</div>';
   html += '<div class="form-grid">';
   html += '<div class="form-group full"><label>Title / Task Name</label><input type="text" id="fd-title" value="'+esc(v('title'))+'" placeholder="e.g. VOOR Due, License Renewal, Tax Filing..."></div>';
   html += '<div class="form-group"><label>Due Date</label><input type="date" id="fd-due" value="'+(v('due_date')||defaultDate)+'"></div>';
@@ -2738,37 +2783,44 @@ function showDateForm(id, defaultMonth) {
   // Add requirer section
   html += '<hr class="section-divider"><div class="section-label">Manage Requirers Dropdown</div>';
   html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
-  html += reqList.map(function(r,i){return '<span class="tag">'+esc(r)+'<span class="tag-del" onclick="removeDateRequirer('+i+')">&#215;</span></span>';}).join('');
+  html += reqList.map(function(r,i){return '<span class="tag">'+esc(r)+'<span class="tag-del" onclick="removeDateRequirer('+i+',\''+scope+'\')">&#215;</span></span>';}).join('');
   html += '</div><div class="tag-add-row" style="margin-top:10px">';
   html += '<input type="text" id="fd-new-requirer" placeholder="Add requirer..." style="max-width:200px">';
-  html += '<button class="btn btn-outline btn-sm" onclick="addDateRequirer()">Add</button></div>';
+  html += '<button class="btn btn-outline btn-sm" onclick="addDateRequirer(\''+scope+'\')">Add</button></div>';
 
-  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="saveDate('+(id||'null')+')">'+( d?'Save Changes':'Add Date')+'</button></div>';
+  var saveBtnClass = scope==='jdz' ? 'btn-teal' : 'btn-gold';
+  html += '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn '+saveBtnClass+'" onclick="saveDate('+(id||'null')+',\''+scope+'\')">'+( d?'Save Changes':'Add Date')+'</button></div>';
   openModal(html);
 }
 
-function addDateRequirer() {
+function addDateRequirer(scope) {
+  scope = scope || 'zc';
+  var cfg = DATES_SCOPES[scope];
+  var defs = scope==='jdz' ? DATE_REQUIRERS_JDZ : DATE_REQUIRERS;
   var inp = document.getElementById('fd-new-requirer');
   var val = inp.value.trim();
   if(!val) return;
-  if(!state.settings.dateRequirers) state.settings.dateRequirers = DATE_REQUIRERS.slice();
-  if(state.settings.dateRequirers.indexOf(val)<0) state.settings.dateRequirers.push(val);
+  if(!state.settings[cfg.reqKey]) state.settings[cfg.reqKey] = defs.slice();
+  if(state.settings[cfg.reqKey].indexOf(val)<0) state.settings[cfg.reqKey].push(val);
   inp.value = '';
   saveSettings();
-  // Refresh the modal form
-  var id = null;
   var modal = document.getElementById('modal-content');
-  if(modal) showDateForm(null, null);
+  if(modal) showDateForm(null, null, scope);
 }
 
-function removeDateRequirer(idx) {
-  if(!state.settings.dateRequirers) state.settings.dateRequirers = DATE_REQUIRERS.slice();
-  state.settings.dateRequirers.splice(idx, 1);
+function removeDateRequirer(idx, scope) {
+  scope = scope || 'zc';
+  var cfg = DATES_SCOPES[scope];
+  var defs = scope==='jdz' ? DATE_REQUIRERS_JDZ : DATE_REQUIRERS;
+  if(!state.settings[cfg.reqKey]) state.settings[cfg.reqKey] = defs.slice();
+  state.settings[cfg.reqKey].splice(idx, 1);
   saveSettings();
-  showDateForm(null, null);
+  showDateForm(null, null, scope);
 }
 
-function saveDate(id) {
+function saveDate(id, scope) {
+  scope = scope || 'zc';
+  var cfg = DATES_SCOPES[scope];
   var title = document.getElementById('fd-title').value.trim();
   if(!title) { alert('Title is required.'); return; }
   function dateOrNull(fid) { var v=document.getElementById(fid).value; return v||null; }
@@ -2784,64 +2836,72 @@ function saveDate(id) {
     completed_date: dateOrNull('fd-completed-date')
   };
   setSyncStatus('saving','Saving...');
-  var promise = id ? apiPatch('zt_dates',id,data) : apiPost('zt_dates',[data]);
+  var promise = id ? apiPatch(cfg.table,id,data) : apiPost(cfg.table,[data]);
   promise.then(function(result){
     var saved = Array.isArray(result) ? result[0] : result;
     if(id) {
-      var idx = (state.dates||[]).findIndex(function(x){return x.id===id;});
-      if(idx>=0) state.dates[idx] = saved;
+      var idx = (state[cfg.list]||[]).findIndex(function(x){return x.id===id;});
+      if(idx>=0) state[cfg.list][idx] = saved;
     } else {
-      if(!state.dates) state.dates=[];
-      state.dates.push(saved);
+      if(!state[cfg.list]) state[cfg.list]=[];
+      state[cfg.list].push(saved);
     }
-    updateDatesBadge();
+    updateDatesBadgeScope(scope);
     setSyncStatus('saved','Saved \u2713');
-    closeModal(); renderDates();
+    closeModal(); cfg.render();
   }).catch(function(e){ setSyncStatus('error','Failed'); alert('Error: '+e.message); });
 }
 
-function markDateComplete(id) {
+function markDateComplete(id, scope) {
+  scope = scope || 'zc';
+  var cfg = DATES_SCOPES[scope];
   var today = new Date().toISOString().slice(0,10);
-  apiPatch('zt_dates', id, {completed: true, completed_date: today}).then(function(result){
+  apiPatch(cfg.table, id, {completed: true, completed_date: today}).then(function(result){
     var saved = Array.isArray(result)?result[0]:result;
-    var idx = (state.dates||[]).findIndex(function(x){return x.id===id;});
-    if(idx>=0) state.dates[idx] = saved;
-    updateDatesBadge(); renderDates();
+    var idx = (state[cfg.list]||[]).findIndex(function(x){return x.id===id;});
+    if(idx>=0) state[cfg.list][idx] = saved;
+    updateDatesBadgeScope(scope); cfg.render();
     setSyncStatus('saved','Saved \u2713');
   }).catch(function(e){ alert('Error: '+e.message); });
 }
 
-function softDeleteDate(id) {
+function softDeleteDate(id, scope) {
+  scope = scope || 'zc';
+  var cfg = DATES_SCOPES[scope];
   if(!confirm('Move this item to trash? It will be permanently deleted after 30 days.')) return;
   var now = new Date().toISOString();
-  apiPatch('zt_dates', id, {deleted_at: now}).then(function(result){
+  apiPatch(cfg.table, id, {deleted_at: now}).then(function(result){
     var saved = Array.isArray(result)?result[0]:result;
-    state.dates = (state.dates||[]).filter(function(x){return x.id!==id;});
-    if(!state.datesTrash) state.datesTrash=[];
-    state.datesTrash.push(saved);
-    updateDatesBadge(); renderDates();
+    state[cfg.list] = (state[cfg.list]||[]).filter(function(x){return x.id!==id;});
+    if(!state[cfg.trash]) state[cfg.trash]=[];
+    state[cfg.trash].push(saved);
+    updateDatesBadgeScope(scope); cfg.render();
     setSyncStatus('saved','Moved to trash \u2713');
   }).catch(function(e){ alert('Error: '+e.message); });
 }
 
-function restoreDate(id) {
-  apiPatch('zt_dates', id, {deleted_at: null}).then(function(result){
+function restoreDate(id, scope) {
+  scope = scope || 'zc';
+  var cfg = DATES_SCOPES[scope];
+  apiPatch(cfg.table, id, {deleted_at: null}).then(function(result){
     var saved = Array.isArray(result)?result[0]:result;
-    state.datesTrash = (state.datesTrash||[]).filter(function(x){return x.id!==id;});
+    state[cfg.trash] = (state[cfg.trash]||[]).filter(function(x){return x.id!==id;});
     saved.deleted_at = null;
-    if(!state.dates) state.dates=[];
-    state.dates.push(saved);
-    updateDatesBadge(); renderDates();
+    if(!state[cfg.list]) state[cfg.list]=[];
+    state[cfg.list].push(saved);
+    updateDatesBadgeScope(scope); cfg.render();
     setSyncStatus('saved','Restored \u2713');
   }).catch(function(e){ alert('Error: '+e.message); });
 }
 
-function emptyDatesTrash() {
+function emptyDatesTrash(scope) {
+  scope = scope || 'zc';
+  var cfg = DATES_SCOPES[scope];
   if(!confirm('Permanently delete all items in the dates trash?')) return;
-  var ids = (state.datesTrash||[]).map(function(d){return d.id;});
-  Promise.all(ids.map(function(id){return apiDelete('zt_dates',id);})).then(function(){
-    state.datesTrash=[];
-    renderDates();
+  var ids = (state[cfg.trash]||[]).map(function(d){return d.id;});
+  Promise.all(ids.map(function(id){return apiDelete(cfg.table,id);})).then(function(){
+    state[cfg.trash]=[];
+    cfg.render();
     setSyncStatus('saved','Trash emptied \u2713');
   }).catch(function(e){ alert('Error: '+e.message); });
 }
