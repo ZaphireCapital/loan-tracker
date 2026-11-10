@@ -4054,7 +4054,7 @@ function buildWifeReport(inc, year, cfg, mon, title){
 
   // Spending this month (true spending) — overall, by category, house, top items
   var spendMonth = 0, spendYtd = 0;
-  var catMap = {}, houseMap = {}, itemList = [];
+  var catMap = {}, houseMap = {}, vendorMap = {};
   state.meExpenses.forEach(function(e){
     if(!e.date) return;
     var d=new Date(e.date+'T12:00:00');
@@ -4067,9 +4067,14 @@ function buildWifeReport(inc, year, cfg, mon, title){
       var c=e.category||'Other';
       catMap[c]=(catMap[c]||0)+amt;
       if(isHouseExpense(e)){ houseMap[c]=(houseMap[c]||0)+amt; }
-      itemList.push({vendor:e.vendor||'—', cat:c, amt:amt});
+      // Aggregate by vendor so "Biggest items" shows each vendor's TOTAL for the
+      // month (e.g. two Hugo lawn-care charges add up), not one transaction.
+      var vn=e.vendor||'—';
+      if(!vendorMap[vn]) vendorMap[vn]={vendor:vn, cat:c, amt:0};
+      vendorMap[vn].amt += amt;
     }
   });
+  var itemList = Object.keys(vendorMap).map(function(k){return vendorMap[k];});
 
   var incYtd = inc.total;
   var netMonth = incThisMonth - spendMonth;
