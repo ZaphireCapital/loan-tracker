@@ -154,13 +154,18 @@ textarea{resize:vertical;min-height:80px;}
   .pipeline-cal-grid{grid-template-columns:1fr!important;}
 }
 @media print{
-  #sidebar,.topbar,.topbar-actions,.btn,.modal-overlay,.no-print{display:none!important;}
-  body{background:white;color:black;}
-  .card{border:1px solid #ccc;box-shadow:none;background:white;}
+  #sidebar,.topbar,.topbar-actions,.btn,.modal-overlay,.no-print,#mobile-nav{display:none!important;}
+  /* Let the whole report flow across pages instead of being clipped to one screen */
+  html,body{overflow:visible!important;height:auto!important;background:white;color:black;}
+  #app{display:block!important;height:auto!important;overflow:visible!important;}
+  #main{display:block!important;height:auto!important;overflow:visible!important;}
+  .content{overflow:visible!important;height:auto!important;padding:0!important;}
+  .card{border:1px solid #ccc;box-shadow:none;background:white;overflow:visible!important;}
   .stat-tile{background:#f5f5f5;border:1px solid #ccc;}
   thead th,tbody td{color:black;}
-  .wife-report{border:none!important;}
+  .wife-report{border:none!important;overflow:visible!important;}
   .wife-report *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
+  .page-break{page-break-before:always;break-before:page;}
 }
 
 /* ── MOBILE BOTTOM NAV (hidden on desktop) ── */
@@ -4098,9 +4103,8 @@ function buildWifeReport(inc, year, cfg, mon, title){
 
   // ── The printable report ──
   var html = '<div class="card wife-report" style="margin-bottom:20px;background:#ffffff;color:#1a2230;border:1px solid #e5e7eb">';
-  html += '<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #8b5cf6;padding-bottom:12px;margin-bottom:18px">';
-  html += '<div><div style="font-size:20px;font-weight:600;color:#5b3fb5">'+esc(title)+'</div><div style="font-size:12px;color:#6b7280">'+MONTHS_FULL[mon]+' '+year+' &middot; prepared by Deric</div></div>';
-  html += '<div style="text-align:right"><div style="font-size:11px;color:#6b7280">Net this month</div><div style="font-size:22px;font-weight:600;color:'+(netMonth>=0?'#1d9e75':'#dc2626')+';font-family:monospace">'+(netMonth>=0?'+':'')+fmtDollar(netMonth)+'</div></div>';
+  html += '<div style="border-bottom:2px solid #8b5cf6;padding-bottom:12px;margin-bottom:18px">';
+  html += '<div style="font-size:20px;font-weight:600;color:#5b3fb5">'+esc(title)+'</div><div style="font-size:12px;color:#6b7280">'+MONTHS_FULL[mon]+' '+year+' &middot; prepared by Deric</div>';
   html += '</div>';
 
   // Summary tiles
@@ -4226,8 +4230,11 @@ function buildWifeReport(inc, year, cfg, mon, title){
   }
 
   // ── Page 2: category breakout — every category, every vendor in it ──
+  // Close the first report card, then open a SEPARATE card with a page break so
+  // it prints as its own page (or pages).
   if(cfg.catBreakout){
-    html += '<div style="page-break-before:always;break-before:page;border-top:1px solid #e5e7eb;margin-top:24px;padding-top:20px">';
+    html += '</div>'; // close first wife-report card
+    html += '<div class="card wife-report page-break" style="margin-bottom:20px;background:#ffffff;color:#1a2230;border:1px solid #e5e7eb;page-break-before:always;break-before:page">';
     html += '<div style="font-size:16px;font-weight:600;color:#5b3fb5;border-bottom:2px solid #8b5cf6;padding-bottom:8px;margin-bottom:14px">What’s in each category <span style="font-size:11px;color:#6b7280;font-weight:400">&middot; '+MONTHS_FULL[mon]+' '+year+'</span></div>';
     var breakoutCats = Object.keys(catVendors).sort(function(a,b){return (catYtd[b]||0)-(catYtd[a]||0);});
     if(breakoutCats.length){
@@ -4246,10 +4253,9 @@ function buildWifeReport(inc, year, cfg, mon, title){
     } else {
       html += '<div style="color:#9ca3af;font-size:12px">No spending recorded this year.</div>';
     }
-    html += '</div>';
   }
 
-  html += '</div>'; // end wife-report
+  html += '</div>'; // end wife-report (first card, or the breakout card if present)
   return html;
 }
 
@@ -4336,6 +4342,7 @@ function renderReportView(r){
   var expYtd = 0, recurring = 0, oneTime = 0;
   state.meExpenses.forEach(function(e){
     if(e.date && new Date(e.date+'T12:00:00').getFullYear()===year){
+      if(!isTrueSpend(e)) return; // exclude card payoffs so we don't double-count
       var amt = +(e.amount||0);
       expYtd += amt;
       if(e.recurring) recurring += amt; else oneTime += amt;
