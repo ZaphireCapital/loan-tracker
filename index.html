@@ -4052,24 +4052,40 @@ function buildWifeReport(inc, year, cfg, mon, title){
   var totalMonths = incMonths.map(function(v,i){ return v + jdzMonths[i]; });
   var incThisMonth = totalMonths[mon];
 
-  // Spending this month (true spending) — overall, by category, house, top items
+  // Spending this month (true spending) — overall, by category, house, top items.
+  // Also YTD-by-category, YTD-by-vendor, and a per-category vendor breakdown
+  // (month + YTD) for the category breakout page.
   var spendMonth = 0, spendYtd = 0;
   var catMap = {}, houseMap = {}, vendorMap = {};
+  var catYtd = {};                 // category -> ytd total
+  var catVendors = {};             // category -> { vendor -> {mo, ytd, cat} }
+  var subByAcct = {};              // subscriptions: account -> {mo, ytd, vendorsThisMo:{} }
   state.meExpenses.forEach(function(e){
     if(!e.date) return;
     var d=new Date(e.date+'T12:00:00');
     if(d.getFullYear()!==year) return;
     if(!isTrueSpend(e)) return;
     var amt=+(e.amount||0);
+    var c=e.category||'Other';
+    var vn=e.vendor||'—';
+    var inMonth = (d.getMonth()===mon);
     spendYtd += amt;
-    if(d.getMonth()===mon){
+    catYtd[c]=(catYtd[c]||0)+amt;
+    if(!catVendors[c]) catVendors[c]={};
+    if(!catVendors[c][vn]) catVendors[c][vn]={vendor:vn, cat:c, mo:0, ytd:0};
+    catVendors[c][vn].ytd += amt;
+    // Subscriptions by account (card / bank it hit)
+    if(c==='Subscriptions'){
+      var acct=e.account||'— unassigned —';
+      if(!subByAcct[acct]) subByAcct[acct]={mo:0, ytd:0, vendorsThisMo:{}};
+      subByAcct[acct].ytd += amt;
+      if(inMonth){ subByAcct[acct].mo += amt; subByAcct[acct].vendorsThisMo[vn]=true; }
+    }
+    if(inMonth){
       spendMonth += amt;
-      var c=e.category||'Other';
       catMap[c]=(catMap[c]||0)+amt;
+      catVendors[c][vn].mo += amt;
       if(isHouseExpense(e)){ houseMap[c]=(houseMap[c]||0)+amt; }
-      // Aggregate by vendor so "Biggest items" shows each vendor's TOTAL for the
-      // month (e.g. two Hugo lawn-care charges add up), not one transaction.
-      var vn=e.vendor||'—';
       if(!vendorMap[vn]) vendorMap[vn]={vendor:vn, cat:c, amt:0};
       vendorMap[vn].amt += amt;
     }
@@ -4118,12 +4134,21 @@ function buildWifeReport(inc, year, cfg, mon, title){
   if(showCats || showHouse){
     html += '<div style="display:grid;grid-template-columns:'+((showCats&&showHouse)?'1fr 1fr':'1fr')+';gap:20px;margin-bottom:18px">';
     if(showCats){
-      var catArr = Object.keys(catMap).map(function(k){return {name:k,amt:catMap[k]};}).sort(function(a,b){return b.amt-a.amt;});
-      html += '<div><div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Where the money went ('+MONTHS_FULL[mon].slice(0,3)+')</div><div style="font-size:12px">';
+      // Show every category that had spending this month OR this year, with
+      // an October column and a YTD column.
+      var catNames = {};
+      Object.keys(catMap).forEach(function(k){catNames[k]=true;});
+      Object.keys(catYtd).forEach(function(k){catNames[k]=true;});
+      var catArr = Object.keys(catNames).map(function(k){return {name:k, mo:(catMap[k]||0), ytd:(catYtd[k]||0)};}).sort(function(a,b){return b.ytd-a.ytd;});
+      var moTot = catArr.reduce(function(s,c){return s+c.mo;},0);
+      var ytdTot = catArr.reduce(function(s,c){return s+c.ytd;},0);
+      html += '<div><div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Where the money went</div>';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:#9ca3af;font-size:10px;text-transform:uppercase"><th style="text-align:left;padding:3px 0">Category</th><th style="text-align:right">'+MONTHS_FULL[mon].slice(0,3)+'</th><th style="text-align:right">YTD</th></tr></thead><tbody>';
       if(catArr.length){
-        catArr.forEach(function(c,i){ html += '<div style="display:flex;justify-content:space-between;padding:6px 0;'+(i<catArr.length-1?'border-bottom:1px solid #f0f0f0':'')+'"><span>'+esc(c.name)+'</span><span style="font-family:monospace">'+fmtDollar(c.amt)+'</span></div>'; });
-      } else { html += '<div style="color:#9ca3af;padding:10px 0">No spending recorded for this month.</div>'; }
-      html += '</div></div>';
+        catArr.forEach(function(c){ html += '<tr style="border-top:1px solid #f0f0f0"><td style="padding:6px 0">'+esc(c.name)+'</td><td style="text-align:right;font-family:monospace">'+(c.mo?fmtDollar(c.mo):'—')+'</td><td style="text-align:right;font-family:monospace;color:#6b7280">'+fmtDollar(c.ytd)+'</td></tr>'; });
+        html += '<tr style="border-top:2px solid #d9cff5;font-weight:600"><td style="padding:7px 0;color:#5b3fb5">Total</td><td style="text-align:right;font-family:monospace;color:#5b3fb5">'+fmtDollar(moTot)+'</td><td style="text-align:right;font-family:monospace;color:#5b3fb5">'+fmtDollar(ytdTot)+'</td></tr>';
+      } else { html += '<tr><td colspan="3" style="color:#9ca3af;padding:10px 0">No spending recorded.</td></tr>'; }
+      html += '</tbody></table></div>';
     }
     if(showHouse){
       var houseArr = Object.keys(houseMap).map(function(k){return {name:k,amt:houseMap[k]};}).sort(function(a,b){return b.amt-a.amt;});
@@ -4148,6 +4173,26 @@ function buildWifeReport(inc, year, cfg, mon, title){
       top.forEach(function(t,i){ html += '<div style="display:flex;justify-content:space-between;padding:6px 0;'+(i<top.length-1?'border-bottom:1px solid #f0f0f0':'')+'"><span>'+esc(t.vendor)+' <span style="color:#9ca3af">&middot; '+esc(t.cat)+'</span></span><span style="font-family:monospace">'+fmtDollar(t.amt)+'</span></div>'; });
     } else { html += '<div style="color:#9ca3af;padding:6px 0">Nothing recorded this month.</div>'; }
     html += '</div>';
+  }
+
+  // Subscriptions by card / account (month + YTD)
+  if(cfg.subsByCard){
+    var acctNames = Object.keys(subByAcct).sort(function(a,b){return subByAcct[b].ytd-subByAcct[a].ytd;});
+    var subCountMo = acctNames.reduce(function(s,a){return s+Object.keys(subByAcct[a].vendorsThisMo).length;},0);
+    var subMoTot = acctNames.reduce(function(s,a){return s+subByAcct[a].mo;},0);
+    var subYtdTot = acctNames.reduce(function(s,a){return s+subByAcct[a].ytd;},0);
+    html += '<div style="font-size:13px;font-weight:600;color:#374151;margin:4px 0 8px">Subscriptions by card <span style="color:#9ca3af;font-weight:400">('+subCountMo+' this month)</span></div>';
+    if(acctNames.length){
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:18px"><thead><tr style="color:#9ca3af;font-size:10px;text-transform:uppercase"><th style="text-align:left;padding:3px 0">Card / account</th><th style="text-align:right"># this mo.</th><th style="text-align:right">'+MONTHS_FULL[mon].slice(0,3)+'</th><th style="text-align:right">YTD</th></tr></thead><tbody>';
+      acctNames.forEach(function(a){
+        var cnt=Object.keys(subByAcct[a].vendorsThisMo).length;
+        html += '<tr style="border-top:1px solid #f0f0f0"><td style="padding:6px 0">'+esc(a)+'</td><td style="text-align:right;font-family:monospace">'+cnt+'</td><td style="text-align:right;font-family:monospace">'+(subByAcct[a].mo?fmtDollar(subByAcct[a].mo):'—')+'</td><td style="text-align:right;font-family:monospace;color:#6b7280">'+fmtDollar(subByAcct[a].ytd)+'</td></tr>';
+      });
+      html += '<tr style="border-top:2px solid #d9cff5;font-weight:600"><td style="padding:7px 0;color:#5b3fb5">Total</td><td style="text-align:right;font-family:monospace;color:#5b3fb5">'+subCountMo+'</td><td style="text-align:right;font-family:monospace;color:#5b3fb5">'+fmtDollar(subMoTot)+'</td><td style="text-align:right;font-family:monospace;color:#5b3fb5">'+fmtDollar(subYtdTot)+'</td></tr>';
+      html += '</tbody></table>';
+    } else {
+      html += '<div style="color:#9ca3af;font-size:12px;margin-bottom:18px">No subscription spending recorded.</div>';
+    }
   }
 
   // Outstanding balances (as of the report month)
@@ -4180,21 +4225,47 @@ function buildWifeReport(inc, year, cfg, mon, title){
     html += '<div style="margin-top:18px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:10px;color:#9ca3af;line-height:1.6">'+(cfg.jdz?jdzLine+' ':'')+'Spending shown is true spending (credit-card payoffs excluded so nothing is counted twice). Income is Deric’s personal share.</div>';
   }
 
+  // ── Page 2: category breakout — every category, every vendor in it ──
+  if(cfg.catBreakout){
+    html += '<div style="page-break-before:always;break-before:page;border-top:1px solid #e5e7eb;margin-top:24px;padding-top:20px">';
+    html += '<div style="font-size:16px;font-weight:600;color:#5b3fb5;border-bottom:2px solid #8b5cf6;padding-bottom:8px;margin-bottom:14px">What’s in each category <span style="font-size:11px;color:#6b7280;font-weight:400">&middot; '+MONTHS_FULL[mon]+' '+year+'</span></div>';
+    var breakoutCats = Object.keys(catVendors).sort(function(a,b){return (catYtd[b]||0)-(catYtd[a]||0);});
+    if(breakoutCats.length){
+      breakoutCats.forEach(function(c){
+        var vendors = Object.keys(catVendors[c]).map(function(vn){return catVendors[c][vn];}).sort(function(a,b){return b.ytd-a.ytd;});
+        html += '<div style="margin-bottom:16px">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:baseline;background:#f3f0fe;border-radius:6px;padding:6px 10px;margin-bottom:4px">';
+        html += '<span style="font-size:12px;font-weight:600;color:#5b3fb5">'+esc(c)+'</span>';
+        html += '<span style="font-size:11px;font-family:monospace"><span style="color:#6b7280">'+MONTHS_FULL[mon].slice(0,3)+'</span> '+fmtDollar(catMap[c]||0)+'&nbsp;&nbsp;<span style="color:#6b7280">YTD</span> '+fmtDollar(catYtd[c]||0)+'</span></div>';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:11px"><tbody>';
+        vendors.forEach(function(v){
+          html += '<tr><td style="padding:4px 10px;color:#374151">'+esc(v.vendor)+'</td><td style="text-align:right;font-family:monospace;width:90px">'+(v.mo?fmtDollar(v.mo):'—')+'</td><td style="text-align:right;font-family:monospace;color:#6b7280;width:90px">'+fmtDollar(v.ytd)+'</td></tr>';
+        });
+        html += '</tbody></table></div>';
+      });
+    } else {
+      html += '<div style="color:#9ca3af;font-size:12px">No spending recorded this year.</div>';
+    }
+    html += '</div>';
+  }
+
   html += '</div>'; // end wife-report
   return html;
 }
 
 // ── Saved custom reports ──
 var WIFE_REPORT_DEFAULTS = {
-  summary:true, incomeChart:true, categories:true, house:true, topItems:true, balances:false, jdz:true, note:true
+  summary:true, incomeChart:true, categories:true, house:true, topItems:true, subsByCard:false, balances:false, catBreakout:false, jdz:true, note:true
 };
 var REPORT_SECTIONS = [
   ['summary','Summary tiles'],
   ['incomeChart','Income month-to-month'],
-  ['categories','Spending by category'],
+  ['categories','Spending by category (month + YTD)'],
   ['house','House & home section'],
   ['topItems','Biggest items this month'],
+  ['subsByCard','Subscriptions by card'],
   ['balances','Outstanding balances'],
+  ['catBreakout','Category breakout page (every vendor)'],
   ['jdz','JDZ income line'],
   ['note','Footer note']
 ];
