@@ -166,6 +166,12 @@ textarea{resize:vertical;min-height:80px;}
   .wife-report{border:none!important;overflow:visible!important;}
   .wife-report *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
   .page-break{page-break-before:always;break-before:page;}
+  /* Invoice print: show only the invoice from inside its modal */
+  body.printing-invoice .modal-overlay{display:flex!important;position:static!important;background:none!important;}
+  body.printing-invoice .modal{max-height:none!important;overflow:visible!important;box-shadow:none!important;background:white!important;padding:0!important;}
+  body.printing-invoice .modal-title,body.printing-invoice .modal-sub,body.printing-invoice .modal-footer{display:none!important;}
+  body.printing-invoice .jdz-invoice{border:none!important;}
+  body.printing-invoice .jdz-invoice *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
 }
 
 /* ── MOBILE BOTTOM NAV (hidden on desktop) ── */
@@ -2995,12 +3001,34 @@ function renderJdzDashboard() {
   el.innerHTML = html;
 }
 
+var _jdzDealFilter = 'all'; // all | <deal type>
+function setJdzDealFilter(f){ _jdzDealFilter = f; renderJdzDeals(); }
+
 function renderJdzDeals() {
   var el = document.getElementById('content');
-  var deals = (state.jdzDeals||[]).filter(function(d){return d.payment_status!=='Paid';}).slice().sort(function(a,b){return (b.deal_date||'')>(a.deal_date||'')?1:-1;});
-  var all = (state.jdzDeals||[]).slice().sort(function(a,b){return (b.deal_date||'')>(a.deal_date||'')?1:-1;});
 
-  var html = '';
+  // Type filter buttons
+  var types = state.settings.jdzDealTypes || ['Consulting','Notary','Document Prep','Software Creation','Company Reorganization'];
+  var html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">';
+  function fbtn(key,label){
+    var on=_jdzDealFilter===key;
+    return '<button onclick="setJdzDealFilter(\''+key+'\')" style="font-size:12px;padding:6px 13px;border-radius:7px;border:1px solid '+(on?'var(--jdz)':'rgba(255,255,255,0.15)')+';background:'+(on?'var(--jdz)':'transparent')+';color:'+(on?'#fff':'var(--muted)')+';cursor:pointer">'+label+'</button>';
+  }
+  html += fbtn('all','All');
+  types.forEach(function(t){ html += fbtn(t,t); });
+  html += '</div>';
+
+  // ── Notary log view: sorted by upcoming appointment ──
+  if(_jdzDealFilter==='Notary'){
+    el.innerHTML = html + renderNotaryLog();
+    return;
+  }
+
+  var pool = (state.jdzDeals||[]);
+  if(_jdzDealFilter!=='all') pool = pool.filter(function(d){return d.deal_type===_jdzDealFilter;});
+  var deals = pool.filter(function(d){return d.payment_status!=='Paid';}).slice().sort(function(a,b){return (b.deal_date||'')>(a.deal_date||'')?1:-1;});
+  var all = pool.slice().sort(function(a,b){return (b.deal_date||'')>(a.deal_date||'')?1:-1;});
+
   // Unpaid / outstanding
   if(deals.length){
     html += '<div class="card" style="margin-bottom:20px;border-color:var(--jdz-border)">';
@@ -3047,6 +3075,150 @@ function dealRow(d, showMarkPaid) {
   if(showMarkPaid) html += '<button class="btn btn-teal btn-sm" onclick="markDealPaid('+d.id+')">&#10003; Paid</button>';
   html += '<button class="btn btn-ghost btn-sm" onclick="openEditDeal('+d.id+')">Edit</button></div></div>';
   return html;
+}
+
+// Combine a notary deal's appointment date + time into a sortable key
+function notaryWhen(d){
+  var ds = d.appt_date || d.deal_date;
+  if(!ds) return null;
+  return new Date(ds + 'T' + (d.appt_time || '12:00') + ':00');
+}
+function renderNotaryLog(){
+  var notary = (state.jdzDeals||[]).filter(function(d){return d.deal_type==='Notary';});
+  if(!notary.length){
+    return '<div class="card" style="text-align:center;padding:50px;color:var(--muted);border-color:var(--jdz-border)">No notary jobs yet. Add a deal and set its type to <strong style="color:var(--jdz)">Notary</strong>.</div>';
+  }
+  var now = new Date(); now.setHours(0,0,0,0);
+  // Upcoming (scheduled) sorted soonest-first; completed/cancelled after
+  var upcoming = notary.filter(function(d){return (d.notary_status||'Scheduled')==='Scheduled';})
+    .sort(function(a,b){ var wa=notaryWhen(a), wb=notaryWhen(b); if(!wa)return 1; if(!wb)return -1; return wa-wb; });
+  var done = notary.filter(function(d){return (d.notary_status||'Scheduled')!=='Scheduled';})
+    .sort(function(a,b){ var wa=notaryWhen(a), wb=notaryWhen(b); return (wb||0)-(wa||0); });
+
+  var total = notary.reduce(function(s,d){return s+(+(d.amount||0));},0);
+  var paidTot = notary.filter(function(d){return d.payment_status==='Paid';}).reduce(function(s,d){return s+(+(d.amount||0));},0);
+
+  var html = '<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">';
+  html += '<div class="stat-tile" style="border-color:var(--jdz-border)"><div class="stat-label">Upcoming signings</div><div class="stat-value"><span style="color:var(--jdz-light)">'+upcoming.length+'</span></div><div class="stat-sub">scheduled</div></div>';
+  html += '<div class="stat-tile"><div class="stat-label">Billed (all)</div><div class="stat-value"><span style="color:var(--jdz-light)">'+fmtDollar(total)+'</span></div><div class="stat-sub">'+notary.length+' jobs</div></div>';
+  html += '<div class="stat-tile"><div class="stat-label">Paid</div><div class="stat-value"><span style="color:var(--jdz-light)">'+fmtDollar(paidTot)+'</span></div><div class="stat-sub">received</div></div>';
+  html += '</div>';
+
+  html += '<div class="card" style="border-color:var(--jdz-border)"><div class="card-header"><div><div class="card-title" style="color:var(--jdz)">Notary Log — Upcoming</div><div class="card-sub">sorted by next appointment</div></div></div>';
+  if(upcoming.length){ upcoming.forEach(function(d){ html += notaryRow(d, now); }); }
+  else { html += '<div style="padding:30px;text-align:center;color:var(--muted)">No upcoming signings.</div>'; }
+  html += '</div>';
+
+  if(done.length){
+    html += '<div class="card" style="margin-top:16px"><div class="card-header"><div><div class="card-title">Completed / Past</div><div class="card-sub">'+done.length+'</div></div></div>';
+    done.forEach(function(d){ html += notaryRow(d, now); });
+    html += '</div>';
+  }
+  return html;
+}
+function notaryRow(d, now){
+  var when = notaryWhen(d);
+  var days = when ? Math.round((new Date(when.getFullYear(),when.getMonth(),when.getDate()) - now)/86400000) : null;
+  var urg = '#8fa0b5';
+  if(days!==null && (d.notary_status||'Scheduled')==='Scheduled'){
+    if(days<0) urg='#8fa0b5';
+    else if(days<=1) urg='#e24b4a';
+    else if(days<=5) urg='#e8a13c';
+    else urg='#8fa0b5';
+  }
+  var st = d.notary_status||'Scheduled';
+  if(st==='Completed') urg='var(--jdz)';
+  var dateStr = when ? (when.toLocaleDateString('en-US',{month:'short',day:'numeric'})) : '—';
+  var timeStr = d.appt_time ? new Date('2000-01-01T'+d.appt_time+':00').toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
+  var stColor = st==='Completed'?'var(--jdz-light)':st==='Cancelled'?'#8fa0b5':'#e8a13c';
+  var stBg = st==='Completed'?'rgba(29,158,117,0.15)':st==='Cancelled'?'rgba(255,255,255,0.08)':'rgba(232,161,60,0.15)';
+
+  var h = '<div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.02);border-left:3px solid '+urg+';border-radius:0 8px 8px 0;padding:11px 13px;margin-bottom:8px">';
+  h += '<div style="flex:0 0 62px;text-align:center"><div style="color:'+urg+';font-size:15px;font-weight:600;font-family:var(--font-mono)">'+dateStr+'</div><div style="color:var(--muted);font-size:10px">'+timeStr+'</div></div>';
+  h += '<div style="flex:1;min-width:0"><div style="color:var(--white);font-size:13px">'+esc(d.signer_name||d.client_name||'—')+'</div>';
+  var sub = [];
+  if(d.client_name) sub.push(esc(d.client_name));
+  if(d.location) sub.push(esc(d.location));
+  h += '<div style="color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+sub.join(' &middot; ')+'</div></div>';
+  h += '<span style="font-size:10px;color:'+stColor+';background:'+stBg+';border-radius:4px;padding:2px 7px;flex-shrink:0">'+st+'</span>';
+  h += '<div style="color:var(--jdz-light);font-family:var(--font-mono);font-size:13px;width:72px;text-align:right;flex-shrink:0">'+fmtDollar(d.amount)+'</div>';
+  h += '<div style="display:flex;gap:5px;flex-shrink:0">';
+  h += '<button class="btn btn-sm" style="background:var(--jdz);color:#fff;border:none" onclick="openNotaryInvoice('+d.id+')" title="Create invoice">&#128424;</button>';
+  h += '<button class="btn btn-ghost btn-sm" onclick="openEditDeal('+d.id+')">Edit</button>';
+  h += '</div></div>';
+  return h;
+}
+
+// JDZaphire seal logo (inline SVG) for invoices
+var JDZ_LOGO_SVG = '<svg width="64" height="64" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-label="JDZaphire Logistics">'
+ + '<defs><clipPath id="jdzk"><path transform="translate(47 91) rotate(62)" clip-rule="evenodd" d="M-400 -400 H400 V400 H-400 Z M0 1.5 L-5.3 -12 V-70.2 a5.3 5.3 0 0 1 10.6 0 V-12 Z"/></clipPath></defs>'
+ + '<g clip-path="url(#jdzk)">'
+ + '<circle cx="60" cy="60" r="56" fill="none" stroke="#0B2559" stroke-width="3"/>'
+ + '<circle cx="60" cy="60" r="50" fill="none" stroke="#0B2559" stroke-width="2.5" stroke-dasharray="1 5.54" stroke-linecap="round"/>'
+ + '<circle cx="60" cy="60" r="44" fill="none" stroke="#0B2559" stroke-width="1.5"/>'
+ + '<path transform="translate(34.430 64)" d="M6.723 -18.9H8.802V-18.63H8.451Q7.749 -18.63 7.2495 -18.1305Q6.75 -17.631 6.723 -16.929V-0.54Q6.723 0.837 6.1965 1.9575Q5.67 3.078 4.7655 3.8745Q3.861 4.671 2.7 5.076Q1.539 5.481 0.27 5.4V5.157Q1.323 4.725 2.025 3.8205Q2.727 2.916 3.078 1.755Q3.429 0.594 3.429 -0.621V-16.929Q3.402 -17.631 2.9025 -18.1305Q2.403 -18.63 1.701 -18.63H1.35V-18.9Z M21.493 -18.9Q24.571 -18.9 26.8525 -17.7525Q29.134 -16.605 30.376 -14.472Q31.618 -12.339 31.618 -9.45Q31.618 -6.561 30.376 -4.4415Q29.134 -2.322 26.8525 -1.161Q24.571 0.0 21.493 0.0H11.908V-0.27H12.259Q12.961 -0.27 13.4605 -0.7695Q13.96 -1.269 13.987 -1.971V-16.929Q13.987 -17.631 13.474 -18.1305Q12.961 -18.63 12.259 -18.63H11.935L11.908 -18.9ZM17.281 -17.874V-1.026H21.277Q23.356 -1.026 24.8545 -2.0655Q26.353 -3.105 27.19 -4.995Q28.027 -6.885 28.027 -9.45Q28.027 -12.015 27.19 -13.905Q26.353 -15.795 24.841 -16.8345Q23.329 -17.874 21.277 -17.874Z M49.493 -19.278V-19.035L38.963 -1.026H45.578Q47.279 -1.026 48.4265 -2.133Q49.574 -3.24 50.06 -5.022H50.33L49.385 0.0H34.724V-0.243L45.092 -17.901H37.721Q36.668 -17.874 36.02 -17.226Q35.372 -16.578 35.372 -15.525V-15.147H35.102V-19.413Q35.372 -19.305 35.9255 -19.197Q36.479 -19.089 37.154 -19.008Q37.829 -18.927 38.396 -18.927H46.631Q47.171 -18.927 47.7785 -18.981Q48.386 -19.035 48.8585 -19.116Q49.331 -19.197 49.493 -19.278Z" fill="#0B2559"/>'
+ + '</g>'
+ + '<g transform="translate(47 91) rotate(62)">'
+ + '<rect x="-3.8" y="-74" width="7.6" height="51" rx="3.8" fill="#0B2559"/>'
+ + '<path d="M-2.6 -13 L-3.5 -23 H3.5 L2.6 -13 Z" fill="#0B2559"/>'
+ + '<rect x="-4.1" y="-26" width="8.2" height="2.6" fill="#2F74E4"/>'
+ + '<path fill-rule="evenodd" fill="#2F74E4" d="M0 0 L-3.2 -9 Q-3.5 -12 -2.6 -13 H2.6 Q3.5 -12 3.2 -9 Z M0 -10 a0.95 0.95 0 1 0 0.01 0 Z M-0.3 -8 H0.3 V-2.2 H-0.3 Z"/>'
+ + '</g></svg>';
+
+function openNotaryInvoice(id){
+  var d = (state.jdzDeals||[]).find(function(x){return x.id===id;});
+  if(!d) return;
+  var baseFee = +(d.base_fee||0);
+  var mileage = +(d.mileage_fee||0);
+  var total = (baseFee||mileage) ? (baseFee+mileage) : +(d.amount||0);
+  var invNum = 'JDZ-'+(new Date().getFullYear())+'-'+String(id).padStart(4,'0');
+  var today = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  var apptStr = '';
+  if(d.appt_date){
+    var w = notaryWhen(d);
+    apptStr = w.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    if(d.appt_time) apptStr += ' &middot; '+new Date('2000-01-01T'+d.appt_time+':00').toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  } else if(d.deal_date){ apptStr = fmtDate(d.deal_date); }
+
+  var inv = '<div class="jdz-invoice" style="background:#fff;color:#1a2230;border-radius:10px;padding:28px">';
+  inv += '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B2559;padding-bottom:16px;margin-bottom:18px">';
+  inv += '<div style="display:flex;align-items:center;gap:12px">'+JDZ_LOGO_SVG;
+  inv += '<div><div style="font-size:18px;font-weight:700;color:#0B2559">JDZaphire Logistics LLC</div><div style="font-size:11px;color:#6b7280">73 Weed Hill Ave, Stamford, CT 06907</div><div style="font-size:11px;color:#6b7280">Notary Public Services</div></div></div>';
+  inv += '<div style="text-align:right"><div style="font-size:22px;font-weight:700;color:#0B2559;letter-spacing:.05em">INVOICE</div><div style="font-size:11px;color:#6b7280">#'+invNum+'</div><div style="font-size:11px;color:#6b7280">'+today+'</div></div>';
+  inv += '</div>';
+  inv += '<div style="display:flex;justify-content:space-between;margin-bottom:18px;font-size:12px">';
+  inv += '<div><div style="color:#9ca3af;text-transform:uppercase;font-size:10px;letter-spacing:.06em;margin-bottom:3px">Bill to</div>';
+  inv += '<div style="font-weight:600">'+esc(d.client_name||'—')+'</div>';
+  if(d.order_num) inv += '<div style="color:#6b7280">Order #'+esc(d.order_num)+'</div>';
+  if(d.signer_name) inv += '<div style="color:#6b7280">Signer: '+esc(d.signer_name)+'</div>';
+  inv += '</div>';
+  inv += '<div style="text-align:right"><div style="color:#9ca3af;text-transform:uppercase;font-size:10px;letter-spacing:.06em;margin-bottom:3px">Appointment</div>';
+  inv += '<div>'+(apptStr||'—')+'</div>';
+  if(d.location) inv += '<div style="color:#6b7280">'+esc(d.location)+'</div>';
+  inv += '</div></div>';
+  inv += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px"><thead><tr style="color:#9ca3af;font-size:10px;text-transform:uppercase;border-bottom:1px solid #e5e7eb"><th style="text-align:left;padding:7px 0">Description</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>';
+  inv += '<tr style="border-bottom:1px solid #f0f0f0"><td style="padding:8px 0">Loan signing / notary service</td><td style="text-align:center">1</td><td style="text-align:right;font-family:monospace">'+fmtDollar(baseFee||total)+'</td></tr>';
+  if(d.notarizations) inv += '<tr style="border-bottom:1px solid #f0f0f0"><td style="padding:8px 0">Notarizations</td><td style="text-align:center">'+d.notarizations+'</td><td style="text-align:right;font-family:monospace">incl.</td></tr>';
+  if(mileage) inv += '<tr style="border-bottom:1px solid #f0f0f0"><td style="padding:8px 0">Roundtrip mileage</td><td style="text-align:center">—</td><td style="text-align:right;font-family:monospace">'+fmtDollar(mileage)+'</td></tr>';
+  inv += '</tbody></table>';
+  inv += '<div style="display:flex;justify-content:flex-end;margin-bottom:20px"><div style="width:220px;font-size:12px">';
+  inv += '<div style="display:flex;justify-content:space-between;padding:4px 0;color:#6b7280"><span>Subtotal</span><span style="font-family:monospace">'+fmtDollar(total)+'</span></div>';
+  inv += '<div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid #0B2559;font-weight:700;font-size:14px;color:#0B2559"><span>Total due</span><span style="font-family:monospace">'+fmtDollar(total)+'</span></div>';
+  inv += '</div></div>';
+  inv += '<div style="border-top:1px solid #e5e7eb;padding-top:12px;font-size:11px;color:#6b7280">Payment due within 30 days. Make checks payable to JDZaphire Logistics LLC. Thank you for your business.</div>';
+  inv += '</div>';
+
+  var html = '<div class="modal-title" style="color:var(--jdz)">Invoice &mdash; '+esc(d.signer_name||d.client_name||'')+'</div>';
+  html += '<div class="modal-sub no-print">Preview below. Print or save as PDF.</div>';
+  html += '<div id="jdz-invoice-wrap">'+inv+'</div>';
+  html += '<div class="modal-footer no-print"><button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+  html += '<button class="btn btn-sm" style="background:var(--jdz);color:#fff;border:none;padding:7px 18px;border-radius:8px;cursor:pointer" onclick="printJdzInvoice()">&#128424; Print / Save PDF</button></div>';
+  openModal(html);
+}
+function printJdzInvoice(){
+  document.body.classList.add('printing-invoice');
+  window.print();
+  setTimeout(function(){ document.body.classList.remove('printing-invoice'); }, 500);
 }
 
 function renderJdzHistory() {
@@ -3318,10 +3490,33 @@ function showDealForm(id){
   html += '</div>';
   html += '<input type="hidden" id="fd-client" value="'+esc(v('client_name'))+'">';
   html += '</div>';
-  html += '<div class="form-group"><label>Deal Type</label><select id="fd-type"><option value="">Select type...</option>';
+  html += '<div class="form-group"><label>Deal Type</label><select id="fd-type" onchange="toggleNotaryFields()"><option value="">Select type...</option>';
   types.forEach(function(t){html+='<option value="'+esc(t)+'"'+(v('deal_type')===t?' selected':'')+'>'+esc(t)+'</option>';});
   html += '</select></div>';
   html += '<div class="form-group"><label>Deal Date</label><input type="date" id="fd-date" value="'+v('deal_date')+'"></div>';
+  html += '</div>';
+
+  // ── Notary signing details (shown only when Deal Type = Notary) ──
+  var isNotary = v('deal_type')==='Notary';
+  html += '<div id="fd-notary-section" style="display:'+(isNotary?'block':'none')+'">';
+  html += '<hr class="section-divider"><div class="section-label" style="color:var(--jdz)">&#9999; Notary signing details</div>';
+  html += '<div class="form-grid">';
+  html += '<div class="form-group full"><label>Signer name</label><input type="text" id="fd-signer" value="'+esc(v('signer_name'))+'" placeholder="Doe, John"></div>';
+  html += '<div class="form-group"><label>Appointment date</label><input type="date" id="fd-appt-date" value="'+v('appt_date')+'"></div>';
+  html += '<div class="form-group"><label>Appointment time</label><input type="time" id="fd-appt-time" value="'+v('appt_time')+'"></div>';
+  html += '<div class="form-group"><label>File / order #</label><input type="text" id="fd-order-num" value="'+esc(v('order_num'))+'" placeholder="2373341"></div>';
+  html += '<div class="form-group"><label>Notarizations</label><input type="number" id="fd-notarizations" step="1" value="'+v('notarizations','')+'" placeholder="0"></div>';
+  html += '<div class="form-group full"><label>Signing location</label><input type="text" id="fd-location" value="'+esc(v('location'))+'" placeholder="14 Elm St, Stamford CT"></div>';
+  html += '</div>';
+  html += '<div class="form-grid cols3">';
+  html += '<div class="form-group"><label>Base fee ($)</label><div class="input-prefix"><span>$</span><input type="number" id="fd-base-fee" step="0.01" value="'+v('base_fee','')+'" placeholder="0.00" oninput="calcNotaryTotal()"></div></div>';
+  html += '<div class="form-group"><label>Mileage ($)</label><div class="input-prefix"><span>$</span><input type="number" id="fd-mileage" step="0.01" value="'+v('mileage_fee','')+'" placeholder="0.00" oninput="calcNotaryTotal()"></div></div>';
+  html += '<div class="form-group"><label>Notary status</label><select id="fd-notary-status">';
+  ['Scheduled','Completed','Cancelled'].forEach(function(s){ html+='<option value="'+s+'"'+(v('notary_status','Scheduled')===s?' selected':'')+'>'+s+'</option>'; });
+  html += '</select></div>';
+  html += '</div>';
+  html += '<div class="form-grid"><div class="form-group"><label>Lender (optional)</label><input type="text" id="fd-lender" value="'+esc(v('lender'))+'" placeholder="UWM"></div>';
+  html += '<div class="form-group"><label>Contact (optional)</label><input type="text" id="fd-contact" value="'+esc(v('contact'))+'" placeholder="Name / phone"></div></div>';
   html += '</div>';
 
   html += '<hr class="section-divider"><div class="section-label">Billing</div>';
@@ -3401,6 +3596,19 @@ function toggleHourly(){
   document.getElementById('fd-rate-group').style.display = isHourly ? '' : 'none';
 }
 
+function toggleNotaryFields(){
+  var sec = document.getElementById('fd-notary-section');
+  var typeEl = document.getElementById('fd-type');
+  if(sec && typeEl) sec.style.display = (typeEl.value==='Notary') ? 'block' : 'none';
+}
+// Base fee + mileage flows into the deal's Total Amount
+function calcNotaryTotal(){
+  var base = parseFloat((document.getElementById('fd-base-fee')||{}).value)||0;
+  var mi = parseFloat((document.getElementById('fd-mileage')||{}).value)||0;
+  var amt = document.getElementById('fd-amount');
+  if(amt) amt.value = (base+mi).toFixed(2);
+}
+
 function calcHourly(){
   var h = parseFloat(document.getElementById('fd-hours').value)||0;
   var r = parseFloat(document.getElementById('fd-rate').value)||0;
@@ -3435,6 +3643,21 @@ function saveDeal(id){
     paid_date: dateOrNull('fd-paid-date'),
     notes: document.getElementById('fd-notes').value.trim()
   };
+  // Notary signing fields (only present when Deal Type = Notary)
+  if(data.deal_type==='Notary'){
+    function val(fid){var el=document.getElementById(fid);return el?el.value.trim():'';}
+    data.signer_name = val('fd-signer')||null;
+    data.appt_date = dateOrNull('fd-appt-date');
+    data.appt_time = val('fd-appt-time')||null;
+    data.order_num = val('fd-order-num')||null;
+    data.location = val('fd-location')||null;
+    data.base_fee = parseFloat(val('fd-base-fee'))||null;
+    data.mileage_fee = parseFloat(val('fd-mileage'))||null;
+    data.notarizations = parseInt(val('fd-notarizations'),10)||null;
+    data.notary_status = val('fd-notary-status')||'Scheduled';
+    data.lender = val('fd-lender')||null;
+    data.contact = val('fd-contact')||null;
+  }
   setSyncStatus('saving','Saving...');
   var promise = id ? apiPatch('jdz_deals',id,data) : apiPost('jdz_deals',[data]);
   promise.then(function(result){
